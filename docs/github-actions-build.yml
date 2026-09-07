@@ -1,0 +1,28 @@
+name: Windows build and tests
+on:
+  push:
+    branches: [main, 'codex/**']
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '8.0.424'
+      - name: Test, build and package
+        shell: pwsh
+        run: ./build.ps1 -Publish
+      - uses: actions/upload-artifact@v7
+        with:
+          name: Windows-x64
+          path: |
+            artifacts/*.zip
+            artifacts/*.sha256
+          if-no-files-found: error
+          retention-days: 7
