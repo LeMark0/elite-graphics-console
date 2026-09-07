@@ -19,6 +19,7 @@ public sealed class LocalSettings
 {
     public AppPaths Paths { get; set; } = new();
     public string LastAppliedFingerprint { get; set; } = "";
+    public List<string>? ComparisonIds { get; set; }
 }
 
 public partial class MainWindow : Window
@@ -84,8 +85,8 @@ public partial class MainWindow : Window
     void NeedSelection(){if(selected==null||selectedFiles==null)throw new InvalidOperationException("Select a profile first.");}
     void RefreshLibrary(string? pick=null)
     {
-        loading=true;var all=store.List();var choice=pick??selected?.Id;ProfilesList.ItemsSource=all.Where(x=>filter=="ALL"||x.Mode==filter).OrderByDescending(x=>x.Protected).ThenBy(x=>x.Historical).ThenBy(x=>x.Mode=="VR"?0:1).ThenByDescending(x=>x.Created).ToList();CompareBox.ItemsSource=all;
-        CompareBox.SelectedItem=all.FirstOrDefault(x=>x.Protected&&x.Mode==(selected?.Mode??"VR"))??all.LastOrDefault();loading=false;
+        loading=true;var all=store.List();var choice=pick??selected?.Id;ProfilesList.ItemsSource=all.Where(x=>filter=="ALL"||x.Mode==filter).OrderByDescending(x=>x.Protected).ThenBy(x=>x.Historical).ThenBy(x=>x.Mode=="VR"?0:1).ThenByDescending(x=>x.Created).ToList();ComparePresets.ItemsSource=all.OrderByDescending(x=>x.Protected).ThenBy(x=>x.Historical).ThenByDescending(x=>x.Created).ToList();
+        var compareIds=settings.ComparisonIds??all.Where(x=>x.Mode=="VR"&&!x.Historical).OrderByDescending(x=>x.Protected).ThenByDescending(x=>x.Created).Take(4).Select(x=>x.Id).ToList(); foreach(var profile in all.Where(x=>compareIds.Contains(x.Id)))ComparePresets.SelectedItems.Add(profile); loading=false;
         ProfilesList.SelectedItem=((IEnumerable<ProfileRevision>)ProfilesList.ItemsSource).FirstOrDefault(x=>x.Id==choice)??((IEnumerable<ProfileRevision>)ProfilesList.ItemsSource).FirstOrDefault(x=>x.Protected)??((IEnumerable<ProfileRevision>)ProfilesList.ItemsSource).FirstOrDefault();
     }
     void RefreshLive()
@@ -157,10 +158,41 @@ public partial class MainWindow : Window
     static string DiffText(IReadOnlyList<SettingDiff> differences)=>differences.Count==0?"No changes.":string.Join("\n\n",differences.Select(x=>$"{x.File}\n{x.Path}\n  {x.Before} → {x.After}"));
     void UpdateComparison()
     {
-        if(selectedFiles==null||CompareBox.SelectedItem is not ProfileRevision other)return;var before=store.Files(other.Id);DiffGrid.ItemsSource=GraphicsModel.Diff(before,selectedFiles);
-        try{var d=store.Definitions(other.Id);CompareSummary.Text=$"Effective planet texture: {GraphicsModel.Texture(before,d,"Planets").Value} → {GraphicsModel.Texture(selectedFiles,selectedDefinitions,"Planets").Value}    /    Galaxy: {GraphicsModel.Texture(before,d,"GalaxyBackground").Value} → {GraphicsModel.Texture(selectedFiles,selectedDefinitions,"GalaxyBackground").Value}";}catch(InvalidDataException){CompareSummary.Text="Definition snapshots unavailable; raw file comparison shown.";}
+        if(settings==null||ComparePresets==null||DiffGrid==null)return;
+        var chosen=ComparePresets.SelectedItems.Cast<ProfileRevision>().OrderByDescending(x=>x.Protected).ThenBy(x=>x.Created).ToList();
+        DiffGrid.Columns.Clear();DiffGrid.ItemsSource=null;
+        if(chosen.Count<2){CompareSummary.Text="Select at least two presets. Click a preset to add or remove its column; no Ctrl key needed.";return;}
+        var sources=chosen.Select(x=>new ComparisonSource(x.DisplayName,store.Files(x.Id),store.Definitions(x.Id))).ToList();
+        bool raw=RawComparison.IsChecked==true;
+        var rows=PresetComparison.Build(sources,raw,OnlyDifferences.IsChecked==true);
+        var label=new FrameworkElementFactory(typeof(StackPanel));
+        var title=new FrameworkElementFactory(typeof(TextBlock));title.SetBinding(TextBlock.TextProperty,new System.Windows.Data.Binding("Setting"));title.SetValue(TextBlock.TextWrappingProperty,TextWrapping.Wrap);label.AppendChild(title);
+        var origin=new FrameworkElementFactory(typeof(TextBlock));origin.SetBinding(TextBlock.TextProperty,new System.Windows.Data.Binding("Source"));origin.SetValue(TextBlock.ForegroundProperty,Brushes.LightSlateGray);origin.SetValue(TextBlock.FontSizeProperty,11d);origin.SetValue(TextBlock.TextWrappingProperty,TextWrapping.Wrap);label.AppendChild(origin);label.SetValue(FrameworkElement.MarginProperty,new Thickness(8));
+        DiffGrid.Columns.Add(new DataGridTemplateColumn{Header="Setting / source",Width=raw?390:255,CellTemplate=new DataTemplate{VisualTree=label}});
+        for(int i=0;i<chosen.Count;i++)
+        {
+            var value=new FrameworkElementFactory(typeof(TextBlock));value.SetBinding(TextBlock.TextProperty,new System.Windows.Data.Binding($"Cells[{i}].Value"));
+            var style=new Style(typeof(TextBlock));style.Setters.Add(new Setter(TextBlock.TextWrappingProperty,TextWrapping.Wrap));style.Setters.Add(new Setter(FrameworkElement.MarginProperty,new Thickness(10)));
+            var changed=new DataTrigger{Binding=new System.Windows.Data.Binding($"Cells[{i}].Different"),Value=true};changed.Setters.Add(new Setter(TextBlock.ForegroundProperty,new SolidColorBrush(Color.FromRgb(255,173,77))));changed.Setters.Add(new Setter(TextBlock.FontWeightProperty,FontWeights.SemiBold));style.Triggers.Add(changed);value.SetValue(FrameworkElement.StyleProperty,style);
+            DiffGrid.Columns.Add(new DataGridTemplateColumn{Header=new TextBlock{Text=chosen[i].Name+"\n"+chosen[i].Mode+$" · r{chosen[i].Number:000} · "+chosen[i].Id[..6],TextWrapping=TextWrapping.Wrap,MaxWidth=190},Width=chosen.Count<=4?new DataGridLength(1,DataGridLengthUnitType.Star):new DataGridLength(205),MinWidth=160,CellTemplate=new DataTemplate{VisualTree=value}});
+        }
+        DiffGrid.ItemsSource=rows;
+        CompareSummary.Text=$"{chosen.Count} presets · {rows.Count} rows · Amber values differ from the first column ({chosen[0].Name}).\n"+
+            (raw?"Raw semantic XML comparison includes older schemas and all overrides; absent means no stored entry. Formatting-only changes are omitted.":"Resolved view: active Custom + general/display settings + inferred planet/background values. Use Raw XML for every override and exact paths.");
+        if(chosen.Select(x=>x.GameBuild).Distinct().Count()>1)CompareSummary.Text+="\nMixed game builds: each preset uses its own captured definitions.";
     }
-    void Compare_Changed(object sender,SelectionChangedEventArgs e){if(!loading)Guard(UpdateComparison);}
+    void Compare_Changed(object sender,SelectionChangedEventArgs e)
+    {
+        if(loading||settings==null)return;
+        Guard(()=>{settings.ComparisonIds=ComparePresets.SelectedItems.Cast<ProfileRevision>().Select(x=>x.Id).ToList();SaveSettings();UpdateComparison();});
+    }
+    void CompareOptions_Changed(object sender,RoutedEventArgs e){if(!loading&&settings!=null)Guard(UpdateComparison);}
+    void SelectVrComparisons_Click(object sender,RoutedEventArgs e)=>Guard(()=>
+    {
+        loading=true;ComparePresets.SelectedItems.Clear();foreach(var p in ComparePresets.Items.Cast<ProfileRevision>().Where(x=>x.Mode=="VR"&&!x.Historical))ComparePresets.SelectedItems.Add(p);loading=false;
+        settings.ComparisonIds=ComparePresets.SelectedItems.Cast<ProfileRevision>().Select(x=>x.Id).ToList();SaveSettings();UpdateComparison();
+    });
+    void ClearComparisons_Click(object sender,RoutedEventArgs e)=>ComparePresets.SelectedItems.Clear();
     void Filter_Click(object sender,RoutedEventArgs e){filter=((Button)sender).Tag.ToString()!;Guard(()=>RefreshLibrary());}
     void Refresh_Click(object sender,RoutedEventArgs e)=>Guard(()=>{RefreshLive();RefreshLibrary();RefreshRuns();});
     void Paths_Click(object sender,RoutedEventArgs e)=>Guard(()=>

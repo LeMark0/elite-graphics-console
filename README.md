@@ -14,7 +14,7 @@ Close Elite normally before the first launch. The app captures the existing grap
 
 1. Select a revision. Its cards show texture values resolved from the saved quality selector, installed definitions and existing XML overrides.
 2. Edit the main controls or use **Advanced XML editor**. Save creates a new revision; the baseline remains intact.
-3. Inspect **Compare**. Both XML and `.fxcfg` settings are included, with indexed paths for duplicate elements.
+3. Open **Compare** and select two or more presets. Each selected revision has its own column; amber cells differ from the first column. **Differences only** hides equal settings. The resolved view shows friendly quality labels and inferred effective planet/background values; **Raw XML / all overrides** includes older `.fxcfg` files and indexed duplicate elements. Collapse the preset picker for more table space. Selections are remembered. Formatting-only changes are omitted from this table; the apply preview still reports them.
 4. With Elite closed, choose **Review & apply selected** and inspect the final diff. Verified backups are retained for **Restore previous apply**.
 5. Launch Elite through your usual route. This app does not launch a VR runtime or modify driver/mod configuration.
 6. Record matching benchmark runs before deciding whether a candidate improves the experience.
