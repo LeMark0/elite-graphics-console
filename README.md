@@ -52,3 +52,9 @@ On Windows with .NET SDK 8.0.424 or a newer 8.0 servicing SDK:
 The first command runs the isolated core tests and builds WPF. `-Publish` also makes a self-contained Windows x64 ZIP and SHA-256 file in `artifacts`. `-DotnetPath` accepts a portable SDK executable. The included GitHub Actions template runs the same checks on Windows when enabled; uploading it requires GitHub CLI workflow permission. See [architecture](docs/ARCHITECTURE.md) for maintenance details.
 
 An independent personal tool, not affiliated with Frontier Developments, Meta or NVIDIA.
+
+### All settings (1.2)
+
+The **All settings** tab lists every saved graphics value from the inferred active Custom schema, Settings.xml, DisplaySettings.xml and all XML overrides. Search by friendly name, raw field, value or source. **Current files** inspects the game folder instead of the selected immutable revision; use **Refresh live** after exiting the game to refresh saved changes. This is an inspection view: Configure and Advanced XML editor still create new revisions.
+
+Optional switches include older schemas and the revision's shipped definition snapshot (current installed definitions when inspecting current files). Exact indexed XML paths preserve duplicates and unknown/new fields. Quality names are inferred from saved definitions where supported; raw enum values remain visible. Conflicting checkerboard values are shown separately without guessing precedence. Available resolutions/refresh rates and unsaved menu changes cannot be established from saved files. This covers persisted graphics controls, not an independently verified menu-by-menu inventory of every game build.

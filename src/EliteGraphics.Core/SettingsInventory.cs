@@ -1,0 +1,81 @@
+using System.Text.RegularExpressions;
+
+namespace EliteGraphics.Core;
+
+public sealed record SettingEntry(string Setting, string Value, string Source, string Path, string Note);
+
+// Enumerate the actual files rather than maintaining a whitelist that hides new game settings.
+public static class SettingsInventory
+{
+    static readonly Dictionary<string,string> Features = new()
+    {
+        ["AOQuality"]="HBAO", ["BloomQuality"]="Bloom", ["EnvmapQuality"]="Envmap",
+        ["MaterialQuality"]="Materials", ["EnvironmentQuality"]="Environment", ["FXQuality"]="FX",
+        ["ParticleEffectsQuality"]="ParticleEffects", ["GalaxyMapQuality"]="GalaxyMap",
+        ["TerrainQuality"]="Terrain", ["TerrainLodBlendingQuality"]="TerrainLodBlending",
+        ["SurfaceMaterialQuality"]="SurfaceMaterial", ["JetConeQuality"]="JetCones", ["VolumetricsQuality"]="Volumetrics",
+        ["DOFEnabled"]="DOF"
+    };
+    static readonly Dictionary<string, string> Names = new()
+    {
+        ["AAMode"]="Anti-aliasing", ["HMDRenderTargetMultiplier"]="HMD image quality",
+        ["SSAAMultiplier"]="Supersampling", ["TextureQualityEx"]="Texture quality",
+        ["TextureFilterQuality"]="Anisotropic filtering", ["SurfaceSamplerQuality"]="Terrain surface sampling",
+        ["DirectionalShadowQuality"]="Directional shadows", ["SpotShadowQuality"]="Spot shadows",
+        ["UpscalingQuality"]="Upscaling", ["AOQuality"]="Ambient occlusion",
+        ["DOFEnabled"]="Depth of field", ["BlurEnabled"]="Blur", ["BloomQuality"]="Bloom",
+        ["EnvmapQuality"]="Reflections / environment map", ["MaterialQuality"]="Material quality",
+        ["EnvironmentQuality"]="Environment quality", ["FXQuality"]="Effects quality",
+        ["ParticleEffectsQuality"]="Particle effects", ["GalaxyMapQuality"]="Galaxy map quality",
+        ["GUIColourQuality"]="HUD colour preset", ["TerrainQuality"]="Terrain quality",
+        ["TerrainLodBlendingQuality"]="Terrain LOD blending", ["SurfaceMaterialQuality"]="Terrain material quality",
+        ["JetConeQuality"]="Jet cone quality", ["VolumetricsQuality"]="Volumetric effects",
+        ["LODDistanceScale"]="Model draw distance", ["GpuSchedulerMultiplier"]="Terrain work",
+        ["FFXCASIntensity"]="CAS sharpening intensity", ["TerrainCheckerboardRenderingEnabled"]="Terrain checkerboard rendering",
+        ["ScreenWidth"]="Display resolution width", ["ScreenHeight"]="Display resolution height",
+        ["FullScreen"]="Fullscreen / window mode", ["VSync"]="Vertical sync",
+        ["LimitFrameRate"]="Frame rate limiter enabled", ["MaxFramesPerSecond"]="Frame rate limit",
+        ["DX11_RefreshRateNumerator"]="Display refresh rate numerator", ["DX11_RefreshRateDenominator"]="Display refresh rate denominator",
+        ["Adapter"]="Display adapter", ["Monitor"]="Monitor", ["StereoscopicMode"]="3D / headset mode",
+        ["IPDAmount"]="Separation / IPD adjustment", ["FOV"]="Ship field of view",
+        ["HumanoidFOV"]="On-foot field of view", ["GammaOffset"]="Gamma",
+        ["DisableGuiEffects"]="Disable GUI effects", ["StereoFocalDistance"]="Stereo focal distance",
+        ["VehicleMotionBlackout"]="Vehicle motion blackout", ["VehicleMaintainHorizonCamera"]="Maintain vehicle horizon",
+        ["DisableCameraShake"]="Disable camera shake", ["HeadBobScale"]="Head bob scale",
+        ["HighResScreenCapAntiAlias"]="High-resolution screenshot AA", ["HighResScreenCapScale"]="High-resolution screenshot scale"
+    };
+
+    public static string Label(string field) => Names.GetValueOrDefault(field, Regex.Replace(field, "(?<=[a-z0-9])(?=[A-Z])", " "));
+
+    public static IReadOnlyList<SettingEntry> Build(FileSet files, byte[] definitions, bool allFiles, bool includeDefaults)
+    {
+        string? active=null;
+        try { active=GraphicsModel.ActiveFile(files); } catch (InvalidDataException) { }
+        var source=files.Clone();
+        if (!allFiles)
+            foreach (var name in source.Keys.Where(n=>n.EndsWith(".fxcfg",StringComparison.OrdinalIgnoreCase)&&n!=active).ToArray()) source.Remove(name);
+        if (includeDefaults && definitions.Length>0) source["Installed defaults (snapshot).xml"]=definitions;
+        var comparison=new ComparisonSource("Inventory",source,definitions);
+        var definitionRoot=definitions.Length>0?XmlIO.Read(definitions).Root:null;
+        var rows=new List<SettingEntry>();
+        foreach (var row in PresetComparison.Build([comparison,comparison],true,false))
+        {
+            if (row.Setting=="(file present)") continue;
+            var field=Regex.Replace(row.Setting.Split('/').Last(), @"\[\d+\]$", "");
+            string note=row.Source==active ? "Saved quality selection; active Custom schema inferred." :
+                row.Source=="GraphicsConfigurationOverride.xml" ? "Override; may target an inactive tier. Duplicate paths retained." :
+                row.Source=="Installed defaults (snapshot).xml" ? "Shipped definition, not necessarily selected; overrides can replace it." :
+                row.Source.EndsWith(".fxcfg",StringComparison.OrdinalIgnoreCase) ? "Older/unselected Custom schema; not treated as active." : "Saved configuration value.";
+            if (field=="AAMode") note+=" Numeric mode, not an AA sample count. Confirm the menu label in this game build.";
+            if (field=="TerrainCheckerboardRenderingEnabled") note+=" If Custom and Settings disagree, precedence is unresolved.";
+            if (field=="FFXCASIntensity") note+=" A saved intensity does not prove sharpening is active.";
+            if (row.Source==active && Features.TryGetValue(field,out var feature) && int.TryParse(row.Cells[0].Value,out var tierIndex))
+            {
+                var tiers=definitionRoot?.Element(feature)?.Elements().Where(e=>e.Element("LocalisationName")!=null).ToArray();
+                if(tiers!=null && tierIndex>=0 && tierIndex<tiers.Length) note=$"{tiers[tierIndex].Name.LocalName} — inferred from saved definitions. "+note;
+            }
+            rows.Add(new(Label(field),row.Cells[0].Value,row.Source,row.Setting,note));
+        }
+        return rows.OrderBy(r=>r.Source).ThenBy(r=>r.Setting).ThenBy(r=>r.Path).ToArray();
+    }
+}

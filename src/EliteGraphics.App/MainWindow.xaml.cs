@@ -28,6 +28,8 @@ public partial class MainWindow : Window
     LocalSettings settings;ProfileRevision? selected;FileSet? selectedFiles;byte[] selectedDefinitions=[];
     string liveFingerprint="",filter="ALL";bool loading;GpuRecorder? recorder;BenchmarkRun? selectedRun;
     List<GpuSample> chartSamples=[];IntPtr handle;
+    IReadOnlyList<SettingEntry> inventory=[];
+    string inventoryContext="";
     [DllImport("user32.dll")] static extern bool RegisterHotKey(IntPtr hWnd,int id,uint modifiers,uint key);
     [DllImport("user32.dll")] static extern bool UnregisterHotKey(IntPtr hWnd,int id);
     static bool GameRunning()=>Process.GetProcessesByName("EliteDangerous64").Any()||Process.GetProcessesByName("EliteDangerous").Any();
@@ -97,7 +99,28 @@ public partial class MainWindow : Window
         var drift=settings.LastAppliedFingerprint.Length>0&&settings.LastAppliedFingerprint!=liveFingerprint;
         LiveStatus.Text=(same?"LIVE MATCHES SELECTED":"SELECTED IS NOT APPLIED")+"  /  "+(GameRunning()?"Elite is running":"Elite is closed")+(drift?"  /  External changes detected":"")+"  /  Game "+settings.Paths.Build();
         StatusText.Text="LOCAL LIBRARY  /  "+store.Root;
+        UpdateInventory();
     }
+    void UpdateInventory()
+    {
+        if(SettingsGrid==null||settings==null)return;
+        var live=InspectLive.IsChecked==true;
+        var files=live?FileSet.Read(settings.Paths.Graphics):selectedFiles;
+        if(files==null){inventory=[];inventoryContext="Select a preset or Current files.";FilterInventory();return;}
+        var definitions=live?settings.Paths.ReadDefinitions():selectedDefinitions;
+        inventory=SettingsInventory.Build(files,definitions,InspectOlder.IsChecked==true,InspectDefaults.IsChecked==true);
+        inventoryContext=(live?"Current saved files (not unsaved game-menu values)":selected!.DisplayName)+" · All saved controls shown; unavailable/missing menu values cannot be inferred.";
+        FilterInventory();
+    }
+    void FilterInventory()
+    {
+        if(SettingsGrid==null)return;
+        var query=SettingsSearch.Text.Trim();
+        var rows=inventory.Where(r=>query.Length==0||string.Join(" ",r.Setting,r.Value,r.Source,r.Path,r.Note).Contains(query,StringComparison.OrdinalIgnoreCase)).ToArray();
+        SettingsGrid.ItemsSource=rows;InventorySummary.Text=$"{rows.Length} / {inventory.Count} values · "+inventoryContext;
+    }
+    void SettingsSearch_Changed(object sender,TextChangedEventArgs e)=>FilterInventory();
+    void InventoryOptions_Changed(object sender,RoutedEventArgs e)=>Guard(UpdateInventory);
     void Profile_Selected(object sender,SelectionChangedEventArgs e){if(loading||ProfilesList.SelectedItem is not ProfileRevision p)return;Guard(()=>LoadProfile(p));}
     void LoadProfile(ProfileRevision profile)
     {

@@ -22,6 +22,18 @@
       </StackPanel></ScrollViewer>
       <WrapPanel Grid.Row="1" Margin="0,16,0,0"><Button Content="Save new revision" Style="{StaticResource Primary}" Click="Save_Click"/><Button Content="Create 4096 planets + galaxy" Click="HiRes_Click"/><Button Content="Review &amp; apply selected" Click="Apply_Click"/><Button Content="Restore previous apply" Click="Restore_Click"/></WrapPanel>
      </Grid></TabItem>
+     <TabItem Header="ALL SETTINGS"><Grid><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+      <TextBlock Text="Browse every saved graphics value, including display, VR, terrain, lighting and overrides. This view is read-only; use Configure or Advanced XML editor to save a new revision. Numeric enums are retained where menu mappings are unverified." Style="{StaticResource Muted}" Margin="0,0,0,10"/>
+      <WrapPanel Grid.Row="1"><TextBox x:Name="SettingsSearch" Width="240" ToolTip="Search setting names, values, files and XML paths" TextChanged="SettingsSearch_Changed"/><CheckBox x:Name="InspectLive" Content="Current files" Margin="12,8" Checked="InventoryOptions_Changed" Unchecked="InventoryOptions_Changed"/><CheckBox x:Name="InspectOlder" Content="Include older schemas" Margin="12,8" Checked="InventoryOptions_Changed" Unchecked="InventoryOptions_Changed"/><CheckBox x:Name="InspectDefaults" Content="Include shipped definitions" Margin="12,8" Checked="InventoryOptions_Changed" Unchecked="InventoryOptions_Changed"/></WrapPanel>
+      <TextBlock x:Name="InventorySummary" Grid.Row="2" Style="{StaticResource Muted}" Margin="0,6,0,12"/>
+      <DataGrid x:Name="SettingsGrid" Grid.Row="3" FrozenColumnCount="1" HorizontalScrollBarVisibility="Auto"><DataGrid.Columns>
+       <DataGridTextColumn Header="Setting" Binding="{Binding Setting}" Width="230" ElementStyle="{StaticResource CellText}"/>
+       <DataGridTextColumn Header="Saved value" Binding="{Binding Value}" Width="130" ElementStyle="{StaticResource CellText}"/>
+       <DataGridTextColumn Header="Source file" Binding="{Binding Source}" Width="190" ElementStyle="{StaticResource CellText}"/>
+       <DataGridTextColumn Header="Meaning / status" Binding="{Binding Note}" Width="280" ElementStyle="{StaticResource CellText}"/>
+       <DataGridTextColumn Header="Exact XML path" Binding="{Binding Path}" Width="360" ElementStyle="{StaticResource CellText}"/>
+      </DataGrid.Columns></DataGrid>
+     </Grid></TabItem>
      <TabItem Header="COMPARE"><Grid><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
       <Expander Header="SELECT PRESETS TO COMPARE — collapse to enlarge the table" IsExpanded="True" Foreground="#FFAD4D" FontWeight="SemiBold">
        <ListBox x:Name="ComparePresets" SelectionMode="Multiple" MaxHeight="155" SelectionChanged="Compare_Changed"><ListBox.ItemsPanel><ItemsPanelTemplate><UniformGrid Columns="2"/></ItemsPanelTemplate></ListBox.ItemsPanel><ListBox.ItemTemplate><DataTemplate><CheckBox IsHitTestVisible="False" Focusable="False" Margin="0" IsChecked="{Binding IsSelected,RelativeSource={RelativeSource AncestorType=ListBoxItem},Mode=OneWay}"><TextBlock Text="{Binding DisplayName}"/></CheckBox></DataTemplate></ListBox.ItemTemplate></ListBox>
@@ -41,6 +53,6 @@
     </TabControl>
    </Grid>
   </Grid>
-  <Border Grid.Row="2" Background="#141D29" Padding="20,7"><Grid><TextBlock x:Name="StatusText" Text="LOCAL LIBRARY  /  SETTINGS UNCHANGED" FontSize="11" Foreground="#9BACBF"/><TextBlock Text="ELITE GRAPHICS CONSOLE  /  1.1.0" FontSize="11" HorizontalAlignment="Right" Foreground="#74889E"/></Grid></Border>
+  <Border Grid.Row="2" Background="#141D29" Padding="20,7"><Grid><TextBlock x:Name="StatusText" Text="LOCAL LIBRARY  /  SETTINGS UNCHANGED" FontSize="11" Foreground="#9BACBF"/><TextBlock Text="ELITE GRAPHICS CONSOLE  /  1.2.0" FontSize="11" HorizontalAlignment="Right" Foreground="#74889E"/></Grid></Border>
  </Grid>
 </Window>

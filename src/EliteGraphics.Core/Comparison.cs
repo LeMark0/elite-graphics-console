@@ -32,7 +32,7 @@ public static class PresetComparison
         foreach (var key in keys)
         {
             var values = maps.Select(x => x.GetValueOrDefault(key, "— absent")).ToArray();
-            var label = raw ? key.Path : Labels.GetValueOrDefault(key.Path, key.Path);
+            var label = raw ? key.Path : Labels.GetValueOrDefault(key.Path, SettingsInventory.Label(key.Path));
             var row = new ComparisonRow(label, key.Group, values.Select(v => new ComparisonCell(v, v != values[0])).ToArray());
             if (!differencesOnly || row.Changed) rows.Add(row);
         }
