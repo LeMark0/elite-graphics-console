@@ -15,8 +15,8 @@ public static class PresetComparison
 {
     static readonly Dictionary<string, string> Labels = new()
     {
-        ["AAMode"] = "Anti-aliasing (raw mode)", ["BloomQuality"] = "Bloom",
-        ["SurfaceSamplerQuality"] = "Terrain surface sampling (raw quality)",
+        ["AAMode"] = "Anti-aliasing", ["BloomQuality"] = "Bloom",
+        ["SurfaceSamplerQuality"] = "Terrain surface sampling",
         ["TerrainLodBlendingQuality"] = "Terrain LOD blending", ["TerrainQuality"] = "Terrain quality",
         ["EnvironmentQuality"] = "Environment quality", ["HMDRenderTargetMultiplier"] = "HMD image quality",
         ["SSAAMultiplier"] = "Supersampling", ["LODDistanceScale"] = "Model draw distance",
@@ -39,23 +39,7 @@ public static class PresetComparison
         return rows;
     }
 
-    static string Display(string field, string value)
-    {
-        string[]? tiers = field switch
-        {
-            "BloomQuality" => ["Off", "Medium", "High", "Ultra"],
-            "TerrainLodBlendingQuality" => ["Off", "High", "Ultra"],
-            "TerrainQuality" => ["Low", "Medium", "High", "Ultra", "Ultra+"],
-            "EnvironmentQuality" or "SurfaceMaterialQuality" => ["Low", "Medium", "High", "Ultra"],
-            "AOQuality" => ["Off", "Low", "Medium", "High"],
-            _ => null
-        };
-        if (tiers != null && int.TryParse(value, out var index) && index >= 0 && index < tiers.Length)
-            return $"{tiers[index]} ({value})";
-        if (double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var number) && double.IsFinite(number))
-            return number.ToString("0.######", CultureInfo.InvariantCulture);
-        return value;
-    }
+    static string Display(string field,string value,byte[] definitions) => SettingsInventory.FormatValue(field,value,definitions.Length>0?XmlIO.Read(definitions).Root:null);
 
     static Dictionary<(string Group, string Path), string> Resolved(ComparisonSource source)
     {
@@ -64,7 +48,7 @@ public static class PresetComparison
         {
             var active = GraphicsModel.ActiveFile(source.Files);
             foreach (var node in XmlIO.Read(source.Files[active]).Root!.Elements())
-                result[("Active Custom preset (inferred)", node.Name.LocalName)] = Display(node.Name.LocalName, node.Value);
+                result[("Active Custom preset (inferred)", node.Name.LocalName)] = Display(node.Name.LocalName, node.Value, source.Definitions);
         }
         catch (InvalidDataException ex) { result[("Active Custom preset (inferred)", "Availability")] = "Unknown: " + ex.Message; }
         foreach (var feature in new[] { "Planets", "GalaxyBackground" })
@@ -83,7 +67,7 @@ public static class PresetComparison
         catch (Exception ex) when (ex is InvalidDataException or KeyNotFoundException) { result[("Effective textures (inferred)", "Planet atmosphere steps")] = "Unknown"; }
         foreach (var name in new[] { "Settings.xml", "DisplaySettings.xml" })
             if (source.Files.TryGetValue(name, out var bytes))
-                foreach (var node in XmlIO.Read(bytes).Root!.Elements()) result[(name, node.Name.LocalName)] = Display(node.Name.LocalName, node.Value);
+                foreach (var node in XmlIO.Read(bytes).Root!.Elements()) result[(name, node.Name.LocalName)] = Display(node.Name.LocalName, node.Value, source.Definitions);
         if (source.Files.TryGetValue("StartPreset.start", out var start)) result[("StartPreset.start", "Startup preset text")] = Encoding.UTF8.GetString(start);
         return result;
     }

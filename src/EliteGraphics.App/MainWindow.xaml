@@ -26,17 +26,17 @@
       <TextBlock Text="Save the game's current settings as a named preset" FontSize="21" Foreground="#FFAD4D" Margin="0,0,0,12"/>
       <StackPanel Grid.Row="1"><TextBlock Text="Exit Elite normally first so its latest changes are written to disk. Read loads a snapshot including XML overrides; Save adds that exact snapshot to your library. Neither button applies settings." Style="{StaticResource Muted}"/><TextBlock Text="Preset name" Margin="0,14,0,0"/><TextBox x:Name="CaptureNameBox" MaxLength="100"/><WrapPanel><Button Content="Read current settings" Click="Capture_Click"/><Button x:Name="SaveCaptureButton" Content="Save as preset" IsEnabled="False" Style="{StaticResource Primary}" Click="SaveCapture_Click"/></WrapPanel></StackPanel>
       <TextBlock x:Name="CaptureSummary" Grid.Row="2" Text="Read current settings to preview them before saving." Style="{StaticResource Muted}" Margin="0,6,0,12"/>
-      <DataGrid x:Name="CaptureGrid" Grid.Row="3"><DataGrid.Columns><DataGridTextColumn Header="Setting" Binding="{Binding Setting}" Width="260" ElementStyle="{StaticResource CellText}"/><DataGridTextColumn Header="Value" Binding="{Binding Value}" Width="140" ElementStyle="{StaticResource CellText}"/><DataGridTextColumn Header="Source" Binding="{Binding Source}" Width="200" ElementStyle="{StaticResource CellText}"/><DataGridTextColumn Header="Meaning / status" Binding="{Binding Note}" Width="*" ElementStyle="{StaticResource CellText}"/></DataGrid.Columns></DataGrid>
+      <DataGrid x:Name="CaptureGrid" Grid.Row="3"><DataGrid.Columns><DataGridTextColumn Header="Setting" Binding="{Binding Setting}" Width="260" ElementStyle="{StaticResource CellText}"/><DataGridTextColumn Header="Value" Binding="{Binding DisplayValue}" Width="140" ElementStyle="{StaticResource CellText}"/><DataGridTextColumn Header="Source" Binding="{Binding Source}" Width="200" ElementStyle="{StaticResource CellText}"/><DataGridTextColumn Header="Raw XML value" Binding="{Binding Value}" Width="110" ElementStyle="{StaticResource CellText}"/><DataGridTextColumn Header="Meaning / status" Binding="{Binding Note}" Width="*" ElementStyle="{StaticResource CellText}"/></DataGrid.Columns></DataGrid>
      </Grid></TabItem>
      <TabItem Header="ALL SETTINGS"><Grid><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
-      <TextBlock Text="Browse every saved graphics value, including display, VR, terrain, lighting and overrides. This view is read-only; use Configure or Advanced XML editor to save a new revision. Numeric enums are retained where menu mappings are unverified." Style="{StaticResource Muted}" Margin="0,0,0,10"/>
+      <TextBlock Text="Browse every saved graphics value, including display, VR, terrain, lighting and overrides. This view is read-only; use Configure or Advanced XML editor to save a new revision. Quality names and units are shown where known; unmapped modes remain explicit. Raw XML values are available alongside them." Style="{StaticResource Muted}" Margin="0,0,0,10"/>
       <WrapPanel Grid.Row="1"><TextBox x:Name="SettingsSearch" Width="240" ToolTip="Search setting names, values, files and XML paths" TextChanged="SettingsSearch_Changed"/><CheckBox x:Name="InspectLive" Content="Current files" Margin="12,8" Checked="InventoryOptions_Changed" Unchecked="InventoryOptions_Changed"/><CheckBox x:Name="InspectOlder" Content="Include older schemas" Margin="12,8" Checked="InventoryOptions_Changed" Unchecked="InventoryOptions_Changed"/><CheckBox x:Name="InspectDefaults" Content="Include shipped definitions" Margin="12,8" Checked="InventoryOptions_Changed" Unchecked="InventoryOptions_Changed"/></WrapPanel>
       <TextBlock x:Name="InventorySummary" Grid.Row="2" Style="{StaticResource Muted}" Margin="0,6,0,12"/>
       <DataGrid x:Name="SettingsGrid" Grid.Row="3" FrozenColumnCount="1" HorizontalScrollBarVisibility="Auto"><DataGrid.Columns>
        <DataGridTextColumn Header="Setting" Binding="{Binding Setting}" Width="230" ElementStyle="{StaticResource CellText}"/>
-       <DataGridTextColumn Header="Saved value" Binding="{Binding Value}" Width="130" ElementStyle="{StaticResource CellText}"/>
+       <DataGridTextColumn Header="Value" Binding="{Binding DisplayValue}" Width="130" ElementStyle="{StaticResource CellText}"/>
        <DataGridTextColumn Header="Source file" Binding="{Binding Source}" Width="190" ElementStyle="{StaticResource CellText}"/>
-       <DataGridTextColumn Header="Meaning / status" Binding="{Binding Note}" Width="280" ElementStyle="{StaticResource CellText}"/>
+       <DataGridTextColumn Header="Raw XML value" Binding="{Binding Value}" Width="110" ElementStyle="{StaticResource CellText}"/><DataGridTextColumn Header="Meaning / status" Binding="{Binding Note}" Width="280" ElementStyle="{StaticResource CellText}"/>
        <DataGridTextColumn Header="Exact XML path" Binding="{Binding Path}" Width="360" ElementStyle="{StaticResource CellText}"/>
       </DataGrid.Columns></DataGrid>
      </Grid></TabItem>
@@ -59,6 +59,6 @@
     </TabControl>
    </Grid>
   </Grid>
-  <Border Grid.Row="2" Background="#141D29" Padding="20,7"><Grid><TextBlock x:Name="StatusText" Text="LOCAL LIBRARY  /  SETTINGS UNCHANGED" FontSize="11" Foreground="#9BACBF"/><TextBlock Text="ELITE GRAPHICS CONSOLE  /  1.3.0" FontSize="11" HorizontalAlignment="Right" Foreground="#74889E"/></Grid></Border>
+  <Border Grid.Row="2" Background="#141D29" Padding="20,7"><Grid><TextBlock x:Name="StatusText" Text="LOCAL LIBRARY  /  SETTINGS UNCHANGED" FontSize="11" Foreground="#9BACBF"/><TextBlock Text="ELITE GRAPHICS CONSOLE  /  1.3.1" FontSize="11" HorizontalAlignment="Right" Foreground="#74889E"/></Grid></Border>
  </Grid>
 </Window>

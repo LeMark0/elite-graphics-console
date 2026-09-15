@@ -1,8 +1,13 @@
 using System.Text.RegularExpressions;
+using System.Globalization;
+using System.Xml.Linq;
 
 namespace EliteGraphics.Core;
 
-public sealed record SettingEntry(string Setting, string Value, string Source, string Path, string Note);
+public sealed record SettingEntry(string Setting, string Value, string Source, string Path, string Note)
+{
+    public string DisplayValue { get; init; } = Value;
+}
 
 // Enumerate the actual files rather than maintaining a whitelist that hides new game settings.
 public static class SettingsInventory
@@ -47,6 +52,31 @@ public static class SettingsInventory
 
     public static string Label(string field) => Names.GetValueOrDefault(field, Regex.Replace(field, "(?<=[a-z0-9])(?=[A-Z])", " "));
 
+    public static string FormatValue(string field,string value,XElement? definitions=null,bool selection=true)
+    {
+        if(bool.TryParse(value,out var flag))return flag?"On":"Off";
+        if(!double.TryParse(value,NumberStyles.Float,CultureInfo.InvariantCulture,out var n)||!double.IsFinite(n))return value;
+        string number=n.ToString("0.######",CultureInfo.InvariantCulture);
+        if(selection && Features.TryGetValue(field,out var feature))
+        {
+            var tiers=definitions?.Element(feature)?.Elements().Where(e=>e.Element("LocalisationName")!=null).ToArray();
+            if(tiers!=null&&n==Math.Truncate(n)&&n>=0&&n<tiers.Length)
+                return tiers[(int)n].Name.LocalName switch {"Mid"=>"Medium","UltraPlus"=>"Ultra+",var name=>name};
+            return $"Unmapped quality ({number})";
+        }
+        if(selection && field=="AAMode")return number switch {"0"=>"Off","1"=>"FXAA",_=>$"Unverified AA mode ({number})"};
+        if(selection && field is "DirectionalShadowQuality" or "SpotShadowQuality")return number switch {"0"=>"Off","1"=>"Low","2"=>"Medium","3"=>"High","4"=>"Ultra",_=>$"Unmapped quality ({number})"};
+        if(selection && field=="SurfaceSamplerQuality")return number switch {"0"=>"Low","1"=>"Medium","2"=>"High","3"=>"Ultra",_=>$"Unmapped quality ({number})"};
+        if(selection && field=="TextureQualityEx")return number switch {"1"=>"Medium","2"=>"High",_=>$"Unmapped quality ({number})"};
+        if(field is "HMDRenderTargetMultiplier" or "SSAAMultiplier" or "HighResScreenCapScale" or "HeadBobScale")return n.ToString("0.0##",CultureInfo.InvariantCulture)+"×";
+        if(field is "LODDistanceScale" or "GpuSchedulerMultiplier" or "FFXCASIntensity")return (n*100).ToString("0.##",CultureInfo.InvariantCulture)+"%";
+        if(field=="MaxFramesPerSecond")return number+" FPS";
+        if(field is "ScreenWidth" or "ScreenHeight" or "TextureSize" or "BlendTargetsResolution")return number+" px";
+        if(field is "FOV" or "HumanoidFOV")return n.ToString("0.##",CultureInfo.InvariantCulture)+"°";
+        if(selection && (field.EndsWith("Quality")||field is "TextureQualityEx" or "FullScreen" or "StereoscopicMode"))return $"Unmapped mode ({number})";
+        return number;
+    }
+
     public static IReadOnlyList<SettingEntry> Build(FileSet files, byte[] definitions, bool allFiles, bool includeDefaults)
     {
         string? active=null;
@@ -66,15 +96,16 @@ public static class SettingsInventory
                 row.Source=="GraphicsConfigurationOverride.xml" ? "Override; may target an inactive tier. Duplicate paths retained." :
                 row.Source=="Installed defaults (snapshot).xml" ? "Shipped definition, not necessarily selected; overrides can replace it." :
                 row.Source.EndsWith(".fxcfg",StringComparison.OrdinalIgnoreCase) ? "Older/unselected Custom schema; not treated as active." : "Saved configuration value.";
-            if (field=="AAMode") note+=" Numeric mode, not an AA sample count. Confirm the menu label in this game build.";
+            if (field=="AAMode") note+=" FXAA mode 1 identified from the user's in-game selection. Other nonzero modes remain unverified.";
             if (field=="TerrainCheckerboardRenderingEnabled") note+=" If Custom and Settings disagree, precedence is unresolved.";
             if (field=="FFXCASIntensity") note+=" A saved intensity does not prove sharpening is active.";
+            if (field is "DirectionalShadowQuality" or "SpotShadowQuality" or "SurfaceSamplerQuality" or "TextureQualityEx") note+=" Quality labels inferred from shipped Low/Medium/High/Ultra presets.";
             if (row.Source==active && Features.TryGetValue(field,out var feature) && int.TryParse(row.Cells[0].Value,out var tierIndex))
             {
                 var tiers=definitionRoot?.Element(feature)?.Elements().Where(e=>e.Element("LocalisationName")!=null).ToArray();
                 if(tiers!=null && tierIndex>=0 && tierIndex<tiers.Length) note=$"{tiers[tierIndex].Name.LocalName} — inferred from saved definitions. "+note;
             }
-            rows.Add(new(Label(field),row.Cells[0].Value,row.Source,row.Setting,note));
+            rows.Add(new(Label(field),row.Cells[0].Value,row.Source,row.Setting,note){DisplayValue=FormatValue(field,row.Cells[0].Value,definitionRoot,row.Source.EndsWith(".fxcfg",StringComparison.OrdinalIgnoreCase)||row.Source is "Settings.xml" or "DisplaySettings.xml")});
         }
         return rows.OrderBy(r=>r.Source).ThenBy(r=>r.Setting).ThenBy(r=>r.Path).ToArray();
     }

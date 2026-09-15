@@ -62,3 +62,5 @@ Optional switches include older schemas and the revision's shipped definition sn
 ### Read current settings and save a named preset (1.3)
 
 Click **Read current settings** in the sidebar or open **Save current**. Exit Elite normally first. Reading previews the saved graphics files, including XML overrides, without creating a preset. Enter **Preset name**, then click **Save as preset**. Saving preserves the exact snapshot and creates a new revision if that name already exists. If the game files or installation changed since reading, read again before saving. Neither button applies settings.
+
+Version 1.3.1 shows readable quality names, On/Off, multipliers, percentages and units in All settings and Save current. Raw XML values remain in a separate column. Unknown modes are explicit; available quality names are inferred from definition snapshots and shipped presets. FXAA mode 1 was identified from the user's in-game selection.

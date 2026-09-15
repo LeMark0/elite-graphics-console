@@ -119,7 +119,7 @@ public partial class MainWindow : Window
     {
         if(SettingsGrid==null)return;
         var query=SettingsSearch.Text.Trim();
-        var rows=inventory.Where(r=>query.Length==0||string.Join(" ",r.Setting,r.Value,r.Source,r.Path,r.Note).Contains(query,StringComparison.OrdinalIgnoreCase)).ToArray();
+        var rows=inventory.Where(r=>query.Length==0||string.Join(" ",r.Setting,r.DisplayValue,r.Value,r.Source,r.Path,r.Note).Contains(query,StringComparison.OrdinalIgnoreCase)).ToArray();
         SettingsGrid.ItemsSource=rows;InventorySummary.Text=$"{rows.Length} / {inventory.Count} values · "+inventoryContext;
     }
     void SettingsSearch_Changed(object sender,TextChangedEventArgs e)=>FilterInventory();
