@@ -30,6 +30,9 @@ public partial class MainWindow : Window
     List<GpuSample> chartSamples=[];IntPtr handle;
     IReadOnlyList<SettingEntry> inventory=[];
     string inventoryContext="";
+    FileSet? captureFiles;
+    byte[] captureDefinitions=[];
+    string captureBuild="",captureMode="",capturePath="",captureGamePath="";
     [DllImport("user32.dll")] static extern bool RegisterHotKey(IntPtr hWnd,int id,uint modifiers,uint key);
     [DllImport("user32.dll")] static extern bool UnregisterHotKey(IntPtr hWnd,int id);
     static bool GameRunning()=>Process.GetProcessesByName("EliteDangerous64").Any()||Process.GetProcessesByName("EliteDangerous").Any();
@@ -164,7 +167,34 @@ public partial class MainWindow : Window
     }
     void Save_Click(object sender,RoutedEventArgs e)=>Guard(()=>{NoRecording();var edited=Edited();var p=store.Save(NameBox.Text,ModeBox.SelectedItem.ToString()!,edited,selectedDefinitions,selected!.GameBuild,NotesBox.Text,selected.Id);RefreshLibrary(p.Id);StatusText.Text="Saved new revision. Live game settings were not changed.";});
     void HiRes_Click(object sender,RoutedEventArgs e)=>Guard(()=>{NoRecording();NeedSelection();if(selected!.Historical)throw new InvalidOperationException("Migrate the historical profile first.");var files=selectedFiles!.Clone();GraphicsModel.SetTexture(files,selectedDefinitions,"Planets",4096);GraphicsModel.SetTexture(files,selectedDefinitions,"GalaxyBackground",4096);var p=store.Save(selected.Mode+" Hi-Res 4096",selected.Mode,files,selectedDefinitions,selected.GameBuild,"Untested combined 4096 planet/background candidate. Other settings preserved.",selected.Id);RefreshLibrary(p.Id);});
-    void Capture_Click(object sender,RoutedEventArgs e)=>Guard(()=>{NoRecording();if(GameRunning())throw new InvalidOperationException("Exit Elite normally before capturing its saved graphics settings.");var files=FileSet.Read(settings.Paths.Graphics);var mode=GraphicsModel.General(files,"StereoscopicMode")=="0"?"FLAT":"VR";var name=Prompt("Capture current settings","Profile name",mode+" Captured");if(name==null)return;var p=store.Save(name,mode,files,settings.Paths.ReadDefinitions(),settings.Paths.Build(),"Captured current files; runtime/visual results unverified.");RefreshLibrary(p.Id);});
+    void Capture_Click(object sender,RoutedEventArgs e)=>Guard(()=>
+    {
+        MainTabs.SelectedItem=CaptureTab;NoRecording();captureFiles=null;SaveCaptureButton.IsEnabled=false;CaptureGrid.ItemsSource=null;
+        CaptureSummary.Text="No snapshot loaded. Exit Elite normally, then read current settings.";
+        if(GameRunning())throw new InvalidOperationException("Exit Elite normally before reading its saved graphics settings.");
+        var files=FileSet.Read(settings.Paths.Graphics);files.Validate();var definitions=settings.Paths.ReadDefinitions();var build=settings.Paths.Build();
+        if(GameRunning()||FileSet.Read(settings.Paths.Graphics).Fingerprint()!=files.Fingerprint())throw new InvalidOperationException("Graphics changed while reading. Read current settings again.");
+        captureFiles=files;captureDefinitions=definitions;captureBuild=build;capturePath=settings.Paths.Graphics;captureGamePath=settings.Paths.Game;
+        captureMode=GraphicsModel.General(files,"StereoscopicMode")=="0"?"FLAT":"VR";
+        if(string.IsNullOrWhiteSpace(CaptureNameBox.Text))CaptureNameBox.Text=captureMode+" Custom";
+        CaptureGrid.ItemsSource=SettingsInventory.Build(files,definitions,false,false);
+        CaptureSummary.Text=$"Read at {DateTime.Now:HH:mm:ss} · {captureMode} · {files.Count} files including all overrides · Game {build}. Enter a name, then Save as preset.";
+        SaveCaptureButton.IsEnabled=true;StatusText.Text="Current settings read. No preset saved yet; game files unchanged.";
+    });
+    void SaveCapture_Click(object sender,RoutedEventArgs e)=>Guard(()=>
+    {
+        NoRecording();if(captureFiles==null)throw new InvalidOperationException("Read current settings first.");
+        if(GameRunning())throw new InvalidOperationException("Exit Elite normally, then read current settings again before saving.");
+        if(capturePath!=settings.Paths.Graphics||captureGamePath!=settings.Paths.Game||FileSet.Read(settings.Paths.Graphics).Fingerprint()!=captureFiles.Fingerprint()||FileSet.Hash(settings.Paths.ReadDefinitions())!=FileSet.Hash(captureDefinitions)||settings.Paths.Build()!=captureBuild)
+        {
+            SaveCaptureButton.IsEnabled=false;captureFiles=null;CaptureSummary.Text="Settings changed since the preview. Read current settings again before saving.";
+            throw new InvalidOperationException(CaptureSummary.Text);
+        }
+        var p=store.Save(CaptureNameBox.Text,captureMode,captureFiles,captureDefinitions,captureBuild,"Captured current saved graphics files, including XML overrides. No settings applied; visual/performance results unverified.");
+        filter="ALL";RefreshLibrary(p.Id);SaveCaptureButton.IsEnabled=false;captureFiles=null;
+        CaptureSummary.Text=$"Saved {p.DisplayName} to the profile library. Game settings unchanged. Read again to capture further changes.";
+        StatusText.Text="Saved named preset: "+p.DisplayName;
+    });
     void Import_Click(object sender,RoutedEventArgs e)=>Guard(()=>{NoRecording();var dialog=new OpenFolderDialog{Title="Select a graphics folder containing Settings.xml"};if(dialog.ShowDialog(this)!=true)return;var path=dialog.FolderName;if(Directory.Exists(Path.Combine(path,"Graphics")))path=Path.Combine(path,"Graphics");var files=FileSet.Read(path);var mode=GraphicsModel.General(files,"StereoscopicMode")=="0"?"FLAT":"VR";var name=Prompt("Import historical settings","Profile name",mode+" Imported");if(name==null)return;var p=store.Save(name,mode,files,settings.Paths.ReadDefinitions(),"Unknown","Imported file snapshot. Migrate before applying.",historical:true);RefreshLibrary(p.Id);});
     void Migrate_Click(object sender,RoutedEventArgs e)=>Guard(()=>{NoRecording();NeedSelection();if(GameRunning())throw new InvalidOperationException("Close Elite before using its current files as a migration template.");var current=FileSet.Read(settings.Paths.Graphics);var files=GraphicsModel.Migrate(selectedFiles!,current);var p=store.Save(selected!.Mode+" Migrated candidate",selected.Mode,files,settings.Paths.ReadDefinitions(),settings.Paths.Build(),"Known older values copied onto the current schema. Fields introduced by the current version retain current values. Untested.",selected.Id);RefreshLibrary(p.Id);});
     void Export_Click(object sender,RoutedEventArgs e)=>Guard(()=>{NeedSelection();_=store.Files(selected!.Id);_=store.Definitions(selected.Id);var dialog=new SaveFileDialog{Title="Export this revision",FileName="elite-profile-"+selected.Id[..8]+".zip",Filter="ZIP archive|*.zip"};if(dialog.ShowDialog(this)!=true)return;ZipFile.CreateFromDirectory(Path.Combine(store.Profiles,selected.Id),dialog.FileName);StatusText.Text="Revision exported to "+dialog.FileName;});
