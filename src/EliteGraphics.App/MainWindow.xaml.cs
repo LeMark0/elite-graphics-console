@@ -44,6 +44,7 @@ public partial class MainWindow : Window
         Loaded+=(_,_)=>Guard(()=>{if(store.List().Count==0&&Directory.Exists(settings.Paths.Graphics))Seed();RefreshLibrary();RefreshLive();RefreshRuns();if(apply.List().Any(x=>x.State=="Prepared"))StatusText.Text="An interrupted apply was found. Use Restore previous apply to recover before continuing.";});
         SourceInitialized+=(_,_)=>{handle=new WindowInteropHelper(this).Handle;HwndSource.FromHwnd(handle)?.AddHook(HotkeyHook);var capture=RegisterHotKey(handle,1,0x4006,0x42);var marker=RegisterHotKey(handle,2,0x4006,0x4D);if(!capture||!marker)StatusText.Text="Some benchmark hotkeys are unavailable. Use the on-screen buttons.";};
         Closing+=(_,e)=>{if(!ConfirmLeave()){e.Cancel=true;return;}recorder?.Dispose();UnregisterHotKey(handle,1);UnregisterHotKey(handle,2);};
+        Activated+=(_,_)=>{if(IsLoaded&&!loading)Guard(RefreshLive);};
         WireEditor();MainTabs.SelectionChanged+=(_,e)=>{if(e.Source==MainTabs)Guard(UpdateInventory);};SaveSettings();
     }
     IntPtr HotkeyHook(IntPtr hwnd,int msg,IntPtr wParam,IntPtr lParam,ref bool handled)
@@ -91,15 +92,33 @@ public partial class MainWindow : Window
         var compareIds=settings.ComparisonIds??all.Where(x=>x.Mode=="VR"&&!x.Historical).OrderByDescending(x=>x.Protected).ThenByDescending(x=>x.Created).Take(4).Select(x=>x.Id).ToList(); foreach(var profile in all.Where(x=>compareIds.Contains(x.Id)))ComparePresets.SelectedItems.Add(profile); loading=false;
         ProfilesList.SelectedItem=((IEnumerable<ProfileRevision>)ProfilesList.ItemsSource).FirstOrDefault(x=>x.Id==choice)??((IEnumerable<ProfileRevision>)ProfilesList.ItemsSource).FirstOrDefault(x=>x.Protected)??((IEnumerable<ProfileRevision>)ProfilesList.ItemsSource).FirstOrDefault();
     }
+    FileSet? checkedGameFiles;
+    string checkedGameDetail="Not checked yet.";
     void RefreshLive()
     {
-        if(!Directory.Exists(settings.Paths.Graphics)){LiveStatus.Text="Graphics folder not found. Set your installation in Paths.";return;}
-        var live=FileSet.Read(settings.Paths.Graphics);liveFingerprint=live.Fingerprint();
-        bool same=selected!=null&&selected.Hashes.Count==live.Count&&selected.Hashes.All(x=>live.TryGetValue(x.Key,out var b)&&FileSet.Hash(b)==x.Value);
-        var drift=settings.LastAppliedFingerprint.Length>0&&settings.LastAppliedFingerprint!=liveFingerprint;
-        LiveStatus.Text=(same?"LIVE MATCHES SELECTED":"SELECTED IS NOT APPLIED")+"  /  "+(GameRunning()?"Elite is running":"Elite is closed")+(drift?"  /  External changes detected":"")+"  /  Game "+settings.Paths.Build();
-        StatusText.Text="LOCAL LIBRARY  /  "+store.Root;
-        UpdateInventory();
+        checkedGameFiles=null;
+        try
+        {
+            if(!Directory.Exists(settings.Paths.Graphics))throw new IOException("Graphics folder not found. Set it in Paths.");
+            checkedGameFiles=FileSet.Read(settings.Paths.Graphics);checkedGameFiles.Validate();liveFingerprint=checkedGameFiles.Fingerprint();
+            var drift=settings.LastAppliedFingerprint.Length>0&&settings.LastAppliedFingerprint!=liveFingerprint;
+            checkedGameDetail=(GameRunning()?"Elite is running — saved files may differ from the running session.":"Elite is closed — saved files will be used on next launch.")+(drift?" External changes detected.":"")+" Checked "+DateTime.Now.ToString("HH:mm:ss")+".";
+        }
+        catch(Exception ex){checkedGameFiles=null;checkedGameDetail="Unable to read saved game settings: "+ex.Message;}
+        UpdateApplyHeader();UpdateInventory();
+    }
+    void UpdateApplyHeader()
+    {
+        if(AppliedLabel==null)return;
+        var known=selected!=null&&checkedGameFiles!=null;
+        var same=known&&selected!.Hashes.Count==checkedGameFiles!.Count&&selected.Hashes.All(x=>checkedGameFiles.TryGetValue(x.Key,out var bytes)&&FileSet.Hash(bytes)==x.Value);
+        var dirty=IsDirty;
+        AppliedLabel.Text=dirty?"UNSAVED CHANGES":!known?"STATUS UNKNOWN":same?"APPLIED":"NOT APPLIED";
+        AppliedBadge.Background=new SolidColorBrush(!dirty&&same?Color.FromRgb(24,83,66):Color.FromRgb(67,49,29));
+        LiveStatus.Text=(dirty?(same?"Saved revision is applied; your edits are not.":"Your edits are not applied. Update or fork to apply them."):same?"This preset matches the saved game settings.":known?"This preset differs from the saved game settings.":"")+" "+checkedGameDetail;
+        HeaderApplyButton.IsEnabled=known&&!same&&!dirty&&selected?.Historical==false;
+        HeaderApplyButton.Content=!dirty&&same?"Already applied":"Apply preset";
+        HeaderApplyButton.ToolTip=dirty?"Update or fork your changes first.":same?"Saved game files already match this preset.":"Review changes and apply this saved preset with Elite closed.";
     }
     void UpdateInventory()
     {
@@ -214,7 +233,7 @@ public partial class MainWindow : Window
     });
     void ClearComparisons_Click(object sender,RoutedEventArgs e)=>ComparePresets.SelectedItems.Clear();
     void Filter_Click(object sender,RoutedEventArgs e){if(!ConfirmLeave())return;if(selected!=null)LoadProfile(selected);filter=((Button)sender).Tag.ToString()!;Guard(()=>RefreshLibrary());}
-    void Refresh_Click(object sender,RoutedEventArgs e)=>Guard(()=>{if(!ConfirmLeave())return;if(selected!=null)LoadProfile(selected);RefreshLive();RefreshLibrary();RefreshRuns();});
+    void Refresh_Click(object sender,RoutedEventArgs e)=>Guard(RefreshLive);
     void Paths_Click(object sender,RoutedEventArgs e)=>Guard(()=>
     {
         NoRecording();var window=Dialog("Installation paths",730,460);var stack=new StackPanel{Margin=new Thickness(24)};window.Content=stack;

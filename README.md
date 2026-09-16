@@ -66,3 +66,5 @@ Use the sidebar **+** to create a named preset from current saved game settings,
 Version 1.3.1 shows readable quality names, On/Off, multipliers, percentages and units in All settings and Save current. Raw XML values remain in a separate column. Unknown modes are explicit; available quality names are inferred from definition snapshots and shipped presets. FXAA mode 1 was identified from the user's in-game selection.
 
 Version 1.4: selecting a preset opens its settings. **Update this preset** saves changes under the same identity while retaining revision history; **Fork this preset** creates a separate preset from the draft. Protected baselines are fork-only. Unsaved edits prompt before leaving. **History** opens earlier revisions. Design decisions are recorded in docs/adr/001 through 003.
+
+Version 1.4.1: **Load current game settings…** creates and selects a named snapshot of saved game settings. **Check applied status** checks disk without discarding edits. The preset header shows Apply and APPLIED/NOT APPLIED (exact saved-file match); a running game may still have older settings in memory. Unsaved drafts are labelled separately. See ADR 004.

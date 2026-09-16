@@ -22,7 +22,7 @@ public partial class MainWindow
     void RefreshDirty()
     {
         if(loading||selected==null)return;
-        var dirty=IsDirty;string? error=null;
+        UpdateApplyHeader();var dirty=IsDirty;string? error=null;
         try{if(!selected.Historical)_=Edited();}catch(Exception ex){error=ex.Message;}
         var latest=store.Heads().Any(p=>p.Id==selected.Id);
         UpdatePresetButton.IsEnabled=dirty&&!selected.Protected&&!selected.Historical&&latest&&error==null;
@@ -57,17 +57,19 @@ public partial class MainWindow
         PlanetBox.SelectedItem=ParseInt(GraphicsModel.Texture(files,selectedDefinitions,"Planets").Value);GalaxyBox.SelectedItem=ParseInt(GraphicsModel.Texture(files,selectedDefinitions,"GalaxyBackground").Value);
         selectedFiles=original;draftFiles=draft;loading=false;
     }
-    void NewPreset_Click(object sender,RoutedEventArgs e)=>Guard(()=>
+    void LoadCurrent_Click(object sender,RoutedEventArgs e)=>CreatePreset(true);
+    void NewPreset_Click(object sender,RoutedEventArgs e)=>CreatePreset(false);
+    void CreatePreset(bool fromGame)=>Guard(()=>
     {
-        NoRecording();var window=Dialog("Create a preset",760,550);var panel=new StackPanel{Margin=new Thickness(24)};window.Content=panel;
-        panel.Children.Add(new TextBlock{Text="STARTING POINT"});var source=new ComboBox{ItemsSource=new[]{"Current in-game settings (saved files)","Default in-game preset","One of my saved presets"},SelectedIndex=0};panel.Children.Add(source);
+        NoRecording();var window=Dialog(fromGame?"Load current game settings":"Create a preset",760,550);var panel=new StackPanel{Margin=new Thickness(24)};window.Content=panel;
+        panel.Children.Add(new TextBlock{Text="STARTING POINT"});var source=new ComboBox{ItemsSource=new[]{"Current in-game settings (saved files)","Default in-game preset","One of my saved presets"},SelectedIndex=0,IsEnabled=!fromGame};panel.Children.Add(source);
         var folder=Path.Combine(settings.Paths.Game,"OptionDefaults");var templates=Directory.Exists(folder)?Directory.GetFiles(folder,"*.fxcfg").OrderBy(Path.GetFileName).ToArray():Array.Empty<string>();
         var defaults=new ComboBox{ItemsSource=templates.Select(p=>new DefaultChoice(Path.GetFileNameWithoutExtension(p),p)).ToList(),DisplayMemberPath="Name",SelectedIndex=0};panel.Children.Add(defaults);
         var saved=new ComboBox{ItemsSource=store.Heads(),DisplayMemberPath="DisplayName",SelectedIndex=0};panel.Children.Add(saved);
         var help=new TextBlock{TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,12,0,12)};panel.Children.Add(help);
-        void Explain(){defaults.Visibility=source.SelectedIndex==1?Visibility.Visible:Visibility.Collapsed;saved.Visibility=source.SelectedIndex==2?Visibility.Visible:Visibility.Collapsed;help.Text=source.SelectedIndex switch{0=>"Close Elite first. This reads the settings saved on disk, including your XML overrides and HUD colours.",1=>"Uses the installed game's default quality values. Display/headset mode, HUD colours and newer fields absent from the default are inherited from current saved settings. Other graphics XML overrides are excluded from this new copy. A VR/flat default name does not switch your runtime or headset mode.",_=>"Copies the saved preset exactly, with its captured game definitions. Your source preset is preserved."};}
-        source.SelectionChanged+=(_,_)=>Explain();Explain();panel.Children.Add(new TextBlock{Text="NEW PRESET NAME"});var name=new TextBox{Text="New preset"};panel.Children.Add(name);
-        var create=new Button{Content="Create preset",HorizontalAlignment=HorizontalAlignment.Right,Style=(Style)FindResource("Primary")};panel.Children.Add(create);
+        void Explain(){defaults.Visibility=source.SelectedIndex==1?Visibility.Visible:Visibility.Collapsed;saved.Visibility=source.SelectedIndex==2?Visibility.Visible:Visibility.Collapsed;help.Text=source.SelectedIndex switch{0=>"Close Elite first. Enter a name, then load its saved settings into a new preset. This includes XML overrides and HUD colours. Your existing presets and game settings are preserved.",1=>"Uses the installed game's default quality values. Display/headset mode, HUD colours and newer fields absent from the default are inherited from current saved settings. Other graphics XML overrides are excluded from this new copy. A VR/flat default name does not switch your runtime or headset mode.",_=>"Copies the saved preset exactly, with its captured game definitions. Your source preset is preserved."};}
+        source.SelectionChanged+=(_,_)=>Explain();Explain();panel.Children.Add(new TextBlock{Text="NEW PRESET NAME"});var name=new TextBox{Text=fromGame?"Current game settings":"New preset"};panel.Children.Add(name);
+        var create=new Button{Content=fromGame?"Load as new preset":"Create preset",HorizontalAlignment=HorizontalAlignment.Right,Style=(Style)FindResource("Primary")};panel.Children.Add(create);
         create.Click+=(_,_)=>{try{
             if(string.IsNullOrWhiteSpace(name.Text))throw new ArgumentException("Enter a preset name.");
             FileSet files;byte[] defs;string build;string? parent=null;bool historical=false;string mode;
