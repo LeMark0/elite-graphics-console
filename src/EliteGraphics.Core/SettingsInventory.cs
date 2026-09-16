@@ -6,6 +6,7 @@ namespace EliteGraphics.Core;
 
 public sealed record SettingEntry(string Setting, string Value, string Source, string Path, string Note)
 {
+    public bool CanEdit=>SettingEditor.CanEdit(this);
     public string DisplayValue { get; init; } = Value;
 }
 

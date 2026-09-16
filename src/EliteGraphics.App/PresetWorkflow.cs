@@ -24,23 +24,24 @@ public partial class MainWindow
         if(loading||selected==null)return;
         UpdateApplyHeader();var dirty=IsDirty;string? error=null;
         try{if(!selected.Historical)_=Edited();}catch(Exception ex){error=ex.Message;}
-        var latest=store.Heads().Any(p=>p.Id==selected.Id);
+        var latest=!currentWorkspace&&store.Heads().Any(p=>p.Id==selected.Id);
+        SaveCurrentButton.Visibility=currentWorkspace?Visibility.Visible:Visibility.Collapsed;UpdatePresetButton.Visibility=ForkPresetButton.Visibility=currentWorkspace?Visibility.Collapsed:Visibility.Visible;DeletePresetButton.IsEnabled=!currentWorkspace;
         UpdatePresetButton.IsEnabled=dirty&&!selected.Protected&&!selected.Historical&&latest&&error==null;
         ForkPresetButton.IsEnabled=error==null;DiscardButton.IsEnabled=dirty;
-        ProfileTitle.Text=selected.Name+(dirty?"  • UNSAVED":"");
-        DirtyStatus.Text=error??(dirty?(selected.Protected?"Protected baseline — fork to keep your changes.":!latest?"Earlier revision — fork to keep your changes.":"Unsaved changes — update this preset or fork a new one."):"Saved preset · changes stay local until you apply them.");
+        ProfileTitle.Text=selected.Name+(dirty?" *":"");
+        DirtyStatus.Text=error??(currentWorkspace?(dirty?"Unsaved changes — save as a preset to keep your edits.":"Current state loaded · Save as preset when ready."):dirty?(selected.Protected?"Protected baseline — fork to keep your changes.":!latest?"Earlier revision — fork to keep your changes.":"Unsaved changes — update this preset or fork a new one."):"Saved preset · changes stay local until you apply them.");
         HmdCard.Text=Short(HmdBox.Text)+"×";SsCard.Text=Short(SsBox.Text)+"×";
         PlanetCard.Text=PlanetBox.SelectedItem?.ToString()??"Unknown";GalaxyCard.Text=GalaxyBox.SelectedItem?.ToString()??"Unknown";
     }
-    bool ConfirmLeave()=>!IsDirty||MessageBox.Show(this,"Discard unsaved changes to "+selected!.Name+"?\n\nUpdate or fork the preset first to keep them.","Unsaved preset",MessageBoxButton.YesNo,MessageBoxImage.Question,MessageBoxResult.No)==MessageBoxResult.Yes;
-    void FinishSave(ProfileRevision profile){draftFiles=null;editorKey=EditorKey();filter="ALL";RefreshLibrary(profile.Id);MainTabs.SelectedItem=ConfigureTab;}
-    void UpdatePreset_Click(object sender,RoutedEventArgs e)=>Guard(()=>{NoRecording();NeedSelection();if(!IsDirty)return;FinishSave(store.Update(selected!.Id,(string)ModeBox.SelectedItem,Edited(),selectedDefinitions,selected.GameBuild,NotesBox.Text));});
+    bool ConfirmLeave()=>!IsDirty||MessageBox.Show(this,"Discard unsaved changes to "+selected!.Name+"?\n\n"+(currentWorkspace?"Save as preset first to keep them.":"Update or fork the preset first to keep them."),"Unsaved preset",MessageBoxButton.YesNo,MessageBoxImage.Question,MessageBoxResult.No)==MessageBoxResult.Yes;
+    void FinishSave(ProfileRevision profile){currentWorkspace=false;draftFiles=null;editorKey=EditorKey();filter="ALL";RefreshLibrary(profile.Id);MainTabs.SelectedItem=ConfigureTab;}
+    void UpdatePreset_Click(object sender,RoutedEventArgs e)=>Guard(()=>{NoRecording();NeedSavedPreset();if(!IsDirty)return;FinishSave(store.Update(selected!.Id,(string)ModeBox.SelectedItem,Edited(),selectedDefinitions,selected.GameBuild,NotesBox.Text));});
     void ForkPreset_Click(object sender,RoutedEventArgs e)=>Guard(()=>{NoRecording();NeedSelection();var name=Prompt("Fork this preset","New preset name",selected!.Name+" Copy");if(name==null)return;FinishSave(store.Fork(name,(string)ModeBox.SelectedItem,selected.Historical?selectedFiles!:Edited(),selectedDefinitions,selected.GameBuild,NotesBox.Text,selected.Id,selected.Historical));});
-    void DiscardPreset_Click(object sender,RoutedEventArgs e)=>Guard(()=>{NeedSelection();LoadProfile(selected!);});
+    void DiscardPreset_Click(object sender,RoutedEventArgs e)=>Guard(()=>{NeedSelection();if(currentWorkspace){draftFiles=null;LoadDraftControls(selectedFiles!);NotesBox.Text="";editorKey=EditorKey();RefreshDirty();UpdateInventory();}else LoadProfile(selected!);});
     void HiRes_Click(object sender,RoutedEventArgs e){PlanetBox.SelectedItem=4096;GalaxyBox.SelectedItem=4096;}
     void History_Click(object sender,RoutedEventArgs e)=>Guard(()=>
     {
-        NeedSelection();var window=Dialog("Preset history",720,460);var panel=new DockPanel{Margin=new Thickness(24)};window.Content=panel;
+        NeedSavedPreset();var window=Dialog("Preset history",720,460);var panel=new DockPanel{Margin=new Thickness(24)};window.Content=panel;
         var view=new Button{Content="View selected revision",HorizontalAlignment=HorizontalAlignment.Right};DockPanel.SetDock(view,Dock.Bottom);panel.Children.Add(view);
         var list=new ListBox{ItemsSource=store.History(selected!.Id),DisplayMemberPath="DisplayName"};panel.Children.Add(list);list.SelectedIndex=0;
         view.Click+=(_,_)=>Guard(()=>{if(list.SelectedItem is not ProfileRevision revision||!ConfirmLeave())return;window.DialogResult=true;LoadProfile(revision);MainTabs.SelectedItem=ConfigureTab;});window.ShowDialog();
@@ -57,7 +58,7 @@ public partial class MainWindow
         PlanetBox.SelectedItem=ParseInt(GraphicsModel.Texture(files,selectedDefinitions,"Planets").Value);GalaxyBox.SelectedItem=ParseInt(GraphicsModel.Texture(files,selectedDefinitions,"GalaxyBackground").Value);
         selectedFiles=original;draftFiles=draft;loading=false;
     }
-    void LoadCurrent_Click(object sender,RoutedEventArgs e)=>CreatePreset(true);
+    void LoadCurrent_Click(object sender,RoutedEventArgs e)=>Guard(LoadCurrentState);
     void NewPreset_Click(object sender,RoutedEventArgs e)=>CreatePreset(false);
     void CreatePreset(bool fromGame)=>Guard(()=>
     {
@@ -87,5 +88,5 @@ public partial class MainWindow
         }catch(Exception ex){MessageBox.Show(window,ex.Message,"Cannot create preset");}};
         window.ShowDialog();
     });
-    sealed record DefaultChoice(string Name,string Path);
+    sealed record DefaultChoice(string Name,string Path){public override string ToString()=>Name;}
 }

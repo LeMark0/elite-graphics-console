@@ -41,7 +41,7 @@ public partial class MainWindow : Window
         if(settings.Paths.Game.Length==0)settings.Paths.Game=DiscoverGame();
         ModeBox.ItemsSource=new[]{"VR","FLAT"};PlanetBox.ItemsSource=new[]{512,1024,2048,2560,4096};GalaxyBox.ItemsSource=new[]{512,1024,2048,2560,4096};
         EnvironmentBox.ItemsSource=new[]{"Low","Medium","High","Ultra"};TerrainBox.ItemsSource=new[]{"Low","Medium","High","Ultra","Ultra+"};AoBox.ItemsSource=new[]{"Off","Low","Medium","High"};VolumetricBox.ItemsSource=new[]{"Low","Medium","High","Ultra"};
-        Loaded+=(_,_)=>Guard(()=>{if(store.List().Count==0&&Directory.Exists(settings.Paths.Graphics))Seed();RefreshLibrary();RefreshLive();RefreshRuns();if(apply.List().Any(x=>x.State=="Prepared"))StatusText.Text="An interrupted apply was found. Use Restore previous apply to recover before continuing.";});
+        Loaded+=(_,_)=>Guard(()=>{if(!store.HasRevisions&&Directory.Exists(settings.Paths.Graphics))Seed();RefreshLibrary();RefreshLive();RefreshRuns();if(apply.List().Any(x=>x.State=="Prepared"))StatusText.Text="An interrupted apply was found. Use Restore previous apply to recover before continuing.";});
         SourceInitialized+=(_,_)=>{handle=new WindowInteropHelper(this).Handle;HwndSource.FromHwnd(handle)?.AddHook(HotkeyHook);var capture=RegisterHotKey(handle,1,0x4006,0x42);var marker=RegisterHotKey(handle,2,0x4006,0x4D);if(!capture||!marker)StatusText.Text="Some benchmark hotkeys are unavailable. Use the on-screen buttons.";};
         Closing+=(_,e)=>{if(!ConfirmLeave()){e.Cancel=true;return;}recorder?.Dispose();UnregisterHotKey(handle,1);UnregisterHotKey(handle,2);};
         Activated+=(_,_)=>{if(IsLoaded&&!loading)Guard(RefreshLive);};
@@ -113,11 +113,11 @@ public partial class MainWindow : Window
         var known=selected!=null&&checkedGameFiles!=null;
         var same=known&&selected!.Hashes.Count==checkedGameFiles!.Count&&selected.Hashes.All(x=>checkedGameFiles.TryGetValue(x.Key,out var bytes)&&FileSet.Hash(bytes)==x.Value);
         var dirty=IsDirty;
-        AppliedLabel.Text=dirty?"UNSAVED CHANGES":!known?"STATUS UNKNOWN":same?"APPLIED":"NOT APPLIED";
+        AppliedLabel.Text=currentWorkspace?(dirty?"UNSAVED CHANGES":"CURRENT GAME SETTINGS"):dirty?"UNSAVED CHANGES":!known?"STATUS UNKNOWN":same?"APPLIED":"NOT APPLIED";
         AppliedBadge.Background=new SolidColorBrush(!dirty&&same?Color.FromRgb(24,83,66):Color.FromRgb(67,49,29));
-        LiveStatus.Text=(dirty?(same?"Saved revision is applied; your edits are not.":"Your edits are not applied. Update or fork to apply them."):same?"This preset matches the saved game settings.":known?"This preset differs from the saved game settings.":"")+" "+checkedGameDetail;
-        HeaderApplyButton.IsEnabled=known&&!same&&!dirty&&selected?.Historical==false;
-        HeaderApplyButton.Content=!dirty&&same?"Already applied":"Apply preset";
+        LiveStatus.Text=(currentWorkspace?(dirty?"Edited current settings — save as a preset to keep or apply changes.":"Loaded current settings — no preset created."):dirty?(same?"Saved revision is applied; your edits are not.":"Your edits are not applied. Update or fork to apply them."):same?"This preset matches the saved game settings.":known?"This preset differs from the saved game settings.":"")+" "+checkedGameDetail;
+        HeaderApplyButton.IsEnabled=!currentWorkspace&&known&&!same&&!dirty&&selected?.Historical==false;
+        HeaderApplyButton.Content=currentWorkspace?"Save preset to apply":!dirty&&same?"Already applied":"Apply preset";
         HeaderApplyButton.ToolTip=dirty?"Update or fork your changes first.":same?"Saved game files already match this preset.":"Review changes and apply this saved preset with Elite closed.";
     }
     void UpdateInventory()
@@ -140,11 +140,12 @@ public partial class MainWindow : Window
     }
     void SettingsSearch_Changed(object sender,TextChangedEventArgs e)=>FilterInventory();
     void InventoryOptions_Changed(object sender,RoutedEventArgs e)=>Guard(UpdateInventory);
-    void Profile_Selected(object sender,SelectionChangedEventArgs e){if(loading||ProfilesList.SelectedItem is not ProfileRevision p)return;Guard(()=>{if(!ConfirmLeave()){loading=true;ProfilesList.SelectedItem=selected;loading=false;return;}LoadProfile(p);MainTabs.SelectedItem=ConfigureTab;});}
-    void LoadProfile(ProfileRevision profile)
+    void Profile_Selected(object sender,SelectionChangedEventArgs e){if(loading||ProfilesList.SelectedItem is not ProfileRevision p)return;Guard(()=>{if(!ConfirmLeave()){loading=true;ProfilesList.SelectedItem=currentWorkspace?null:selected;loading=false;return;}LoadProfile(p);MainTabs.SelectedItem=ConfigureTab;});}
+    void LoadProfile(ProfileRevision profile,FileSet? current=null,byte[]? definitions=null)
     {
-        loading=true;draftFiles=null;selected=profile;selectedFiles=store.Files(profile.Id);selectedDefinitions=store.Definitions(profile.Id);
+        MainTabs.IsEnabled=true;loading=true;draftFiles=null;currentWorkspace=current!=null;selected=profile;selectedFiles=current??store.Files(profile.Id);selectedDefinitions=definitions??store.Definitions(profile.Id);
         ProfileTitle.Text=profile.Name;ProfileSubtitle.Text=$"Revision {profile.Number:000} · {profile.Mode} · {profile.Created.ToLocalTime():dd MMM yyyy HH:mm} · {profile.GameBuild} · {(profile.Protected?"Protected original / edit a derivative":profile.Status)}";
+        if(currentWorkspace)ProfileSubtitle.Text="Current game settings · captured from saved files · not saved as a preset";
         NameBox.Text=profile.Name;ModeBox.SelectedItem=profile.Mode;NotesBox.Text="";
         string Q(string field)=>GraphicsModel.Quality(selectedFiles,field);
         HmdBox.Text=Q("HMDRenderTargetMultiplier");SsBox.Text=Q("SSAAMultiplier");LodBox.Text=Q("LODDistanceScale");WorkBox.Text=Q("GpuSchedulerMultiplier");ShadowBox.Text=Q("DirectionalShadowQuality");SpotBox.Text=Q("SpotShadowQuality");
@@ -167,7 +168,7 @@ public partial class MainWindow : Window
     }
     FileSet Edited()
     {
-        NeedSelection();if(selected!.Historical)throw new InvalidOperationException("Migrate a historical profile to the current schema before editing.");
+        NeedSelection();if(EditorKey()==editorKey)return (draftFiles??selectedFiles!).Clone();if(selected!.Historical)throw new InvalidOperationException("Migrate a historical profile to the current schema before editing.");
         var data=(draftFiles??selectedFiles!).Clone();string active=GraphicsModel.ActiveFile(data);
         void SetNumber(string file,string field,double value){var current=XmlIO.Read(data[file]).Root?.Element(field)?.Value;if(double.TryParse(current,NumberStyles.Float,CultureInfo.InvariantCulture,out var existing)&&existing==value)return;GraphicsModel.Set(data,file,field,value.ToString("0.######",CultureInfo.InvariantCulture));}
         if(EnvironmentBox.SelectedIndex<0||TerrainBox.SelectedIndex<0||AoBox.SelectedIndex<0||VolumetricBox.SelectedIndex<0)throw new ArgumentException("Select valid quality tiers.");
@@ -182,11 +183,11 @@ public partial class MainWindow : Window
         return data;
     }
     void Import_Click(object sender,RoutedEventArgs e)=>Guard(()=>{NoRecording();if(!ConfirmLeave())return;var dialog=new OpenFolderDialog{Title="Select a graphics folder containing Settings.xml"};if(dialog.ShowDialog(this)!=true)return;var path=dialog.FolderName;if(Directory.Exists(Path.Combine(path,"Graphics")))path=Path.Combine(path,"Graphics");var files=FileSet.Read(path);var mode=GraphicsModel.General(files,"StereoscopicMode")=="0"?"FLAT":"VR";var name=Prompt("Import historical settings","Profile name",mode+" Imported");if(name==null)return;var p=store.Save(name,mode,files,settings.Paths.ReadDefinitions(),"Unknown","Imported file snapshot. Migrate before applying.",historical:true);FinishSave(p);});
-    void Migrate_Click(object sender,RoutedEventArgs e)=>Guard(()=>{NoRecording();NeedSelection();if(!ConfirmLeave())return;if(GameRunning())throw new InvalidOperationException("Close Elite before using its current files as a migration template.");var current=FileSet.Read(settings.Paths.Graphics);var files=GraphicsModel.Migrate(selectedFiles!,current);var p=store.Save(selected!.Mode+" Migrated candidate",selected.Mode,files,settings.Paths.ReadDefinitions(),settings.Paths.Build(),"Known older values copied onto the current schema. Fields introduced by the current version retain current values. Untested.",selected.Id);FinishSave(p);});
-    void Export_Click(object sender,RoutedEventArgs e)=>Guard(()=>{NeedSelection();_=store.Files(selected!.Id);_=store.Definitions(selected.Id);var dialog=new SaveFileDialog{Title="Export this revision",FileName="elite-profile-"+selected.Id[..8]+".zip",Filter="ZIP archive|*.zip"};if(dialog.ShowDialog(this)!=true)return;ZipFile.CreateFromDirectory(Path.Combine(store.Profiles,selected.Id),dialog.FileName);StatusText.Text="Revision exported to "+dialog.FileName;});
+    void Migrate_Click(object sender,RoutedEventArgs e)=>Guard(()=>{NoRecording();NeedSavedPreset();if(!ConfirmLeave())return;if(GameRunning())throw new InvalidOperationException("Close Elite before using its current files as a migration template.");var current=FileSet.Read(settings.Paths.Graphics);var files=GraphicsModel.Migrate(selectedFiles!,current);var p=store.Save(selected!.Mode+" Migrated candidate",selected.Mode,files,settings.Paths.ReadDefinitions(),settings.Paths.Build(),"Known older values copied onto the current schema. Fields introduced by the current version retain current values. Untested.",selected.Id);FinishSave(p);});
+    void Export_Click(object sender,RoutedEventArgs e)=>Guard(()=>{NeedSavedPreset();_=store.Files(selected!.Id);_=store.Definitions(selected.Id);var dialog=new SaveFileDialog{Title="Export this revision",FileName="elite-profile-"+selected.Id[..8]+".zip",Filter="ZIP archive|*.zip"};if(dialog.ShowDialog(this)!=true)return;ZipFile.CreateFromDirectory(Path.Combine(store.Profiles,selected.Id),dialog.FileName);StatusText.Text="Revision exported to "+dialog.FileName;});
     void Apply_Click(object sender,RoutedEventArgs e)=>Guard(()=>
     {
-        NoRecording();NeedSelection();if(selected!.Historical)throw new InvalidOperationException("Historical snapshots must be migrated first.");if(GameRunning())throw new InvalidOperationException("Close Elite Dangerous first.");
+        NoRecording();NeedSavedPreset();if(selected!.Historical)throw new InvalidOperationException("Historical snapshots must be migrated first.");if(GameRunning())throw new InvalidOperationException("Close Elite Dangerous first.");
         if(IsDirty||Edited().Fingerprint()!=selectedFiles!.Fingerprint())throw new InvalidOperationException("The editor contains unsaved changes. Update or fork this preset before applying it.");
         var current=FileSet.Read(settings.Paths.Graphics);var expected=current.Fingerprint();var validated=store.Files(selected.Id);var defs=store.Definitions(selected.Id);
         var changes=GraphicsModel.Diff(current,validated);var text="Only the listed profile files will be replaced. Unrelated files, driver settings and the VR runtime are preserved. A verified rollback snapshot is saved first.\n\n"+DiffText(changes);
@@ -232,7 +233,7 @@ public partial class MainWindow : Window
         settings.ComparisonIds=ComparePresets.SelectedItems.Cast<ProfileRevision>().Select(x=>x.Id).ToList();SaveSettings();UpdateComparison();
     });
     void ClearComparisons_Click(object sender,RoutedEventArgs e)=>ComparePresets.SelectedItems.Clear();
-    void Filter_Click(object sender,RoutedEventArgs e){if(!ConfirmLeave())return;if(selected!=null)LoadProfile(selected);filter=((Button)sender).Tag.ToString()!;Guard(()=>RefreshLibrary());}
+    void Filter_Click(object sender,RoutedEventArgs e){if(!ConfirmLeave())return;if(selected!=null&&!currentWorkspace)LoadProfile(selected);filter=((Button)sender).Tag.ToString()!;Guard(()=>RefreshLibrary());}
     void Refresh_Click(object sender,RoutedEventArgs e)=>Guard(RefreshLive);
     void Paths_Click(object sender,RoutedEventArgs e)=>Guard(()=>
     {
@@ -251,7 +252,7 @@ public partial class MainWindow : Window
     void ToggleRecording()
     {
         if(recorder!=null){var id=recorder.Run.Id;recorder.Dispose();recorder=null;RecordButton.Content="Start capture  Ctrl+Shift+B";RecordingText.Text="Capture saved. Add overlay observations and visual notes below.";RefreshRuns(id);return;}
-        NeedSelection();var live=FileSet.Read(settings.Paths.Graphics);if(selected!.Hashes.Count!=live.Count||selected.Hashes.Any(x=>!live.TryGetValue(x.Key,out var b)||FileSet.Hash(b)!=x.Value))throw new InvalidOperationException("Selected revision does not match live graphics. Apply it with Elite closed, or capture the current files, before recording.");
+        NeedSavedPreset();var live=FileSet.Read(settings.Paths.Graphics);if(selected!.Hashes.Count!=live.Count||selected.Hashes.Any(x=>!live.TryGetValue(x.Key,out var b)||FileSet.Hash(b)!=x.Value))throw new InvalidOperationException("Selected revision does not match live graphics. Apply it with Elite closed, or capture the current files, before recording.");
         var run=new BenchmarkRun{RevisionId=selected.Id,ProfileName=selected.DisplayName,Mode=selected.Mode,Scenario=ScenarioBox.Text,GameBuild=settings.Paths.Build(),ActualHashes=live.Hashes(),RuntimeNotes=RuntimeBox.Text,GameRunningAtStart=GameRunning()};
         var runtime=Registry.GetValue(@"HKEY_LOCAL_MACHINE\SOFTWARE\Khronos\OpenXR\1","ActiveRuntime",null) as string;run.RuntimeNotes+="\nWindows OpenXR registration at capture: "+(runtime??"Unknown")+" (registration alone does not prove runtime in use).";
         try{using var p=Process.Start(new ProcessStartInfo("nvidia-smi","--query-gpu=name,driver_version,memory.total --format=csv,noheader -i 0"){UseShellExecute=false,CreateNoWindow=true,RedirectStandardOutput=true,RedirectStandardError=true});if(p!=null){if(p.WaitForExit(3000))run.Hardware=p.StandardOutput.ReadToEnd().Trim();else p.Kill();}}catch(System.ComponentModel.Win32Exception){}
@@ -298,6 +299,6 @@ public partial class MainWindow : Window
         combo.SelectionChanged+=(_,_)=>{CommitBuffer();previous=combo.SelectedItem as string;if(previous!=null){original=System.Text.Encoding.UTF8.GetString(draft[previous]);text.Text=original;}};
         combo.SelectedItem=GraphicsModel.ActiveFile(draft);var panel=new StackPanel{Orientation=Orientation.Horizontal,HorizontalAlignment=HorizontalAlignment.Right};Grid.SetRow(panel,2);grid.Children.Add(panel);
         panel.Children.Add(new TextBlock{Text="XML is validated. Live files stay unchanged until Apply.",VerticalAlignment=VerticalAlignment.Center,Margin=new Thickness(0,0,20,8),Foreground=Brushes.LightSlateGray});var save=new Button{Content="Use these changes",Style=(Style)FindResource("Primary")};panel.Children.Add(save);
-        save.Click+=(_,_)=>{try{CommitBuffer();draft.Validate();_=GraphicsModel.ActiveFile(draft);window.DialogResult=true;var original=selected!;LoadProfile(original);draftFiles=draft;LoadDraftControls(draft);NotesBox.Text=draftNotes;RefreshDirty();UpdateInventory();}catch(Exception ex){MessageBox.Show(window,ex.Message,"Cannot use draft");}};window.ShowDialog();
+        save.Click+=(_,_)=>{try{CommitBuffer();draft.Validate();_=GraphicsModel.ActiveFile(draft);window.DialogResult=true;AcceptDraft(draft);NotesBox.Text=draftNotes;RefreshDirty();UpdateInventory();}catch(Exception ex){MessageBox.Show(window,ex.Message,"Cannot use draft");}};window.ShowDialog();
     });
 }

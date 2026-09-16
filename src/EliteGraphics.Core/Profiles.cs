@@ -6,7 +6,13 @@ public sealed class ProfileStore
     public string Profiles => Path.Combine(Root,"profiles");
     public ProfileStore(string root) { Root = Path.GetFullPath(root); Directory.CreateDirectory(Profiles); }
     string Folder(string id) { if(!Guid.TryParseExact(id,"N",out _)) throw new InvalidDataException("Invalid profile ID."); return Path.Combine(Profiles,id); }
-    public IReadOnlyList<ProfileRevision> List() => Directory.GetDirectories(Profiles).Where(x=>File.Exists(Path.Combine(x,"revision.json"))).Select(x=>JsonIO.Load<ProfileRevision>(Path.Combine(x,"revision.json"))).OrderByDescending(x=>x.Created).ToList();
+    IReadOnlyList<ProfileRevision> All() => Directory.GetDirectories(Profiles).Where(x=>File.Exists(Path.Combine(x,"revision.json"))).Select(x=>JsonIO.Load<ProfileRevision>(Path.Combine(x,"revision.json"))).OrderByDescending(x=>x.Created).ToList();
+    public bool HasRevisions=>All().Count>0;
+    string DeletedFile=>Path.Combine(Root,"deleted-presets.json");
+    HashSet<string> Deleted()=>File.Exists(DeletedFile)?JsonIO.Load<HashSet<string>>(DeletedFile):new();
+    public IReadOnlyList<ProfileRevision> List(){var deleted=Deleted();return All().Where(p=>!deleted.Contains(Identity(p))).ToArray();}
+    public void Delete(string id){var key=Identity(Get(id));var deleted=Deleted();deleted.Add(key);JsonIO.Save(DeletedFile,deleted);}
+    public void RestoreDeleted(string id){var deleted=Deleted();deleted.Remove(Identity(Get(id)));JsonIO.Save(DeletedFile,deleted);}
     public ProfileRevision Get(string id) => JsonIO.Load<ProfileRevision>(Path.Combine(Folder(id),"revision.json"));
     public string Identity(ProfileRevision revision)
     {
@@ -21,7 +27,7 @@ public sealed class ProfileStore
         return string.IsNullOrEmpty(revision.PresetId)?revision.Id:revision.PresetId;
     }
     public IReadOnlyList<ProfileRevision> Heads()=>List().GroupBy(Identity).Select(g=>g.OrderByDescending(p=>p.Created).ThenByDescending(p=>p.Number).First()).ToList();
-    public IReadOnlyList<ProfileRevision> History(string id){var key=Identity(Get(id));return List().Where(p=>Identity(p)==key).OrderByDescending(p=>p.Created).ToList();}
+    public IReadOnlyList<ProfileRevision> History(string id){var key=Identity(Get(id));return All().Where(p=>Identity(p)==key).OrderByDescending(p=>p.Created).ToList();}
     public ProfileRevision Update(string id,string mode,FileSet files,byte[] definitions,string build,string notes)
     {
         var original=Get(id);
