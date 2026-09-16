@@ -55,12 +55,14 @@ An independent personal tool, not affiliated with Frontier Developments, Meta or
 
 ### All settings (1.2)
 
-The **All settings** tab lists every saved graphics value from the inferred active Custom schema, Settings.xml, DisplaySettings.xml and all XML overrides. Search by friendly name, raw field, value or source. **Current files** inspects the game folder instead of the selected immutable revision; use **Refresh live** after exiting the game to refresh saved changes. This is an inspection view: Configure and Advanced XML editor still create new revisions.
+The **All settings** tab lists every saved graphics value from the inferred active Custom schema, Settings.xml, DisplaySettings.xml and all XML overrides. Search by friendly name, raw field, value or source. The view follows the selected preset and its current draft. Configure and Advanced XML edit that draft; Update or Fork saves it.
 
 Optional switches include older schemas and the revision's shipped definition snapshot (current installed definitions when inspecting current files). Exact indexed XML paths preserve duplicates and unknown/new fields. Quality names are inferred from saved definitions where supported; raw enum values remain visible. Conflicting checkerboard values are shown separately without guessing precedence. Available resolutions/refresh rates and unsaved menu changes cannot be established from saved files. This covers persisted graphics controls, not an independently verified menu-by-menu inventory of every game build.
 
 ### Read current settings and save a named preset (1.3)
 
-Click **Read current settings** in the sidebar or open **Save current**. Exit Elite normally first. Reading previews the saved graphics files, including XML overrides, without creating a preset. Enter **Preset name**, then click **Save as preset**. Saving preserves the exact snapshot and creates a new revision if that name already exists. If the game files or installation changed since reading, read again before saving. Neither button applies settings.
+Use the sidebar **+** to create a named preset from current saved game settings, an installed game default, or a saved preset. Current/default capture requires Elite to be closed. Default quality values inherit current display/headset mode, HUD and unspecified newer fields; other XML graphics overrides are excluded from the new copy. Creation does not apply settings.
 
 Version 1.3.1 shows readable quality names, On/Off, multipliers, percentages and units in All settings and Save current. Raw XML values remain in a separate column. Unknown modes are explicit; available quality names are inferred from definition snapshots and shipped presets. FXAA mode 1 was identified from the user's in-game selection.
+
+Version 1.4: selecting a preset opens its settings. **Update this preset** saves changes under the same identity while retaining revision history; **Fork this preset** creates a separate preset from the draft. Protected baselines are fork-only. Unsaved edits prompt before leaving. **History** opens earlier revisions. Design decisions are recorded in docs/adr/001 through 003.

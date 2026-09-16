@@ -9,6 +9,7 @@ namespace EliteGraphics.Core;
 public sealed record ProfileRevision
 {
     public string Id { get; init; } = Guid.NewGuid().ToString("N");
+    public string PresetId { get; init; } = "";
     public string Name { get; init; } = "New profile";
     public int Number { get; init; } = 1;
     public string? ParentId { get; init; }
