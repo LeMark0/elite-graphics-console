@@ -60,5 +60,40 @@ Test("Inventory editor addresses exact duplicate leaf and keeps source immutable
 Test("Inventory editor handles attributes and refuses definitions and schema version",()=>{var b=Baseline();GraphicsModel.Set(b,"Settings.xml","GammaOffset","0.5");var doc=XmlIO.Read(b["Settings.xml"]);doc.Root!.SetAttributeValue("Example","old");b["Settings.xml"]=XmlIO.Write(doc);var rows=SettingsInventory.Build(b,definitions,false,true);var attr=rows.Single(r=>r.Path.EndsWith("/@Example"));var changed=SettingEditor.Change(b,attr,"new");Assert(XmlIO.Read(changed["Settings.xml"]).Root!.Attribute("Example")!.Value=="new");Throws(()=>SettingEditor.Change(b,rows.First(r=>r.Source=="Installed defaults (snapshot).xml"),"1"));Throws(()=>SettingEditor.Change(b,rows.First(r=>r.Path.EndsWith("/@MajorVersion")),"9"));});
 Test("Inline multiplier accepts decimals after integer serialization and enforces bounds",()=>{var files=Baseline();GraphicsModel.Set(files,GraphicsModel.ActiveFile(files),"HMDRenderTargetMultiplier","1");var row=SettingsInventory.Build(files,definitions,false,false).Single(r=>r.Setting=="HMD image quality");var changed=SettingEditor.Change(files,row,"1.1");Assert(GraphicsModel.Quality(changed,"HMDRenderTargetMultiplier")=="1.1");Assert(GraphicsModel.Quality(files,"HMDRenderTargetMultiplier")=="1");Throws(()=>SettingEditor.Change(files,row,"0.1"));Throws(()=>SettingEditor.Change(files,row,"3"));Throws(()=>SettingEditor.Change(files,row,"NaN"));});
 Test("Inline percentage accepts fractions after whole serialization",()=>{var files=Baseline();GraphicsModel.Set(files,GraphicsModel.ActiveFile(files),"LODDistanceScale","1");var row=SettingsInventory.Build(files,definitions,false,false).Single(r=>r.Setting=="Model draw distance");Assert(GraphicsModel.Quality(SettingEditor.Change(files,row,"0.7"),"LODDistanceScale")=="0.7");Throws(()=>SettingEditor.Change(files,row,"70"));Throws(()=>SettingEditor.Change(files,row,"-0.1"));});
+Test("AA choices include SMAA without inventing intermediate mode numbers",()=>{
+    var row=new SettingEntry("Anti-aliasing","99","Custom.4.4.fxcfg","Root/AAMode[1]",""){DisplayValue="Unverified mode (99)"};
+    var choices=SettingEditor.Choices(row,definitions);
+    Assert(choices.Select(c=>c.Value).SequenceEqual(new[]{"0","1","4","99"}));
+    Assert(choices.Single(c=>c.Value=="4").Label=="SMAA");
+    Assert(choices.Last().Label.Contains("99"));
+});
+Test("Feature choices use localisation labels including DOF and every tier",()=>{
+    var defs=Encoding.UTF8.GetBytes("<GraphicsConfig><DOF><Off><LocalisationName>$QUALITY_OFF;</LocalisationName></Off><Low><LocalisationName>$QUALITY_MEDIUM;</LocalisationName></Low><Medium><LocalisationName>$QUALITY_HIGH$</LocalisationName></Medium></DOF><Terrain>"+string.Concat(Enumerable.Range(0,18).Select(i=>$"<Tier{i}><LocalisationName>$QUALITY_TIER_{i};</LocalisationName></Tier{i}>"))+"</Terrain></GraphicsConfig>");
+    var row=new SettingEntry("Depth of field","1","Custom.4.4.fxcfg","Root/DOFEnabled[1]","");
+    Assert(SettingEditor.Choices(row,defs).Select(c=>c.Label).SequenceEqual(new[]{"Off","Medium","High"}));
+    Assert(SettingsInventory.FormatValue("DOFEnabled","1",XmlIO.Read(defs).Root)=="Medium");
+    Assert(SettingEditor.Choices(row with {Path="Root/TerrainQuality[1]"},defs).Count==18);
+});
+Test("Localisation metadata is readable and cannot rewrite engine identifiers",()=>{
+    var files=Baseline();files["GraphicsConfigurationOverride.xml"]=Encoding.UTF8.GetBytes("<GraphicsConfig><Planets><Ultra><LocalisationName>$QUALITY_ULTRA$</LocalisationName></Ultra></Planets></GraphicsConfig>");
+    var before=files["GraphicsConfigurationOverride.xml"].ToArray();
+    var row=SettingsInventory.Build(files,definitions,false,false).Single(r=>r.Path.Contains("LocalisationName"));
+    Assert(row.DisplayValue=="Ultra"&&row.Value=="$QUALITY_ULTRA$"&&!row.CanEdit);
+    Throws(()=>SettingEditor.Change(files,row,"Ultra"));Assert(before.SequenceEqual(files["GraphicsConfigurationOverride.xml"]));
+    Assert(SettingsInventory.FormatValue("LocalisationName","$QUALITY_ULTRAPLUS;")=="Ultra+");
+});
+Test("Descriptions explain controls and expose uncertainty for unknown fields",()=>{
+    Assert(SettingReference.Describe("Root/AAMode[1]").Contains("FXAA"));
+    Assert(SettingReference.Describe("Root/HMDRenderTargetMultiplier[1]").Contains("headset"));
+    Assert(SettingReference.Describe("Root/UnknownEngineField[1]").Contains("not verified"));
+    Assert(SettingsInventory.Build(Baseline(),definitions,true,true).All(r=>r.Description.Length>0));
+});
+Test("Explicit mode choices do not decode override internals",()=>{
+    var row=new SettingEntry("Upscaling","0","Custom.4.4.fxcfg","Root/UpscalingQuality[1]","");
+    Assert(SettingEditor.Choices(row,definitions).Count==3);
+    Assert(SettingEditor.Choices(row with {Source="GraphicsConfigurationOverride.xml"},definitions).Count==0);
+    Assert(SettingsInventory.FormatValue("UpscalingQuality","2",null,false)=="2");
+    Assert(SettingEditor.Choices(row with {Path="Root/TextureFilterQuality[1]"},definitions).Count==5);
+});
 int failures=0;foreach(var (name,action) in tests){try{action();Console.WriteLine("PASS "+name);}catch(Exception e){failures++;Console.WriteLine("FAIL "+name+" — "+e.Message);}}
 Console.WriteLine($"{tests.Count-failures}/{tests.Count} tests passed. Isolated fixtures: {root}");return failures==0?0:1;

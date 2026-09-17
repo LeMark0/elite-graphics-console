@@ -26,7 +26,8 @@ public sealed class TerminalSetting : INotifyPropertyChanged
     public bool HasChoices => Editable && Choices.Count > 0;
     public Visibility ArrowVisibility => HasChoices ? Visibility.Visible : Visibility.Hidden;
     public Visibility ChoiceVisibility => Choices.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
-    public Visibility TextVisibility => Choices.Count > 0 ? Visibility.Collapsed : Visibility.Visible;
+    public Visibility TextVisibility => Choices.Count > 0 || !Editable ? Visibility.Collapsed : Visibility.Visible;
+    public Visibility ReferenceVisibility => Choices.Count == 0 && !Editable ? Visibility.Visible : Visibility.Collapsed;
     public string Title => Entry.Setting + (Entry.Value != Saved || Pending ? " *" : "");
     string? input;
     public string Input { get => input ?? Entry.Value; set { input=value; Changed(nameof(Input)); Changed(nameof(Title)); OnInput?.Invoke(this); } }
@@ -76,7 +77,7 @@ public partial class MainWindow
         var key=(SettingsGrid.SelectedItem as TerminalSetting)?.Entry;
         var query=SettingsSearch.Text.Trim();var category=(CategoryBox.SelectedItem as ComboBoxItem)?.Content as string;
         var order=new[]{"VR / RENDERING","PLANETS / GALAXY","TERRAIN","LIGHTING / EFFECTS","DISPLAY","HUD","ADVANCED / OTHER"};
-        var rows=terminalRows.Where(r=>(CategoryBox.SelectedIndex<=0||r.Category==category)&&(query.Length==0||string.Join(" ",r.Entry.Setting,r.Entry.DisplayValue,r.Entry.Value,r.Entry.Source,r.Entry.Path).Contains(query,StringComparison.OrdinalIgnoreCase))).OrderBy(r=>Array.IndexOf(order,r.Category)).ThenBy(r=>r.Texture==null?1:0).ThenBy(r=>r.Entry.Setting).ToList();
+        var rows=terminalRows.Where(r=>(CategoryBox.SelectedIndex<=0||r.Category==category)&&(query.Length==0||string.Join(" ",r.Entry.Setting,r.Entry.Description,r.Entry.DisplayValue,r.Entry.Value,r.Entry.Source,r.Entry.Path).Contains(query,StringComparison.OrdinalIgnoreCase))).OrderBy(r=>Array.IndexOf(order,r.Category)).ThenBy(r=>r.Texture==null?1:0).ThenBy(r=>r.Entry.Setting).ToList();
         var view=new ListCollectionView(rows);view.GroupDescriptions.Add(new PropertyGroupDescription(nameof(TerminalSetting.Category)));SettingsGrid.ItemsSource=view;
         SettingsGrid.SelectedItem=rows.FirstOrDefault(r=>key!=null&&r.Entry.Source==key.Source&&r.Entry.Path==key.Path)??rows.FirstOrDefault();
         InventorySummary.Text=$"{rows.Count} / {terminalRows.Count} values · Saved-file values; running-game output is not measured.";
@@ -90,7 +91,7 @@ public partial class MainWindow
     void ShowSettingDetail(TerminalSetting row)
     {
         if(DetailTitle==null)return;
-        DetailTitle.Text=row.Entry.Setting.ToUpperInvariant();DetailNote.Text=row.Entry.Note+(row.Choices.Count==0?"\n\nEdit raw values: multipliers use 1.0; percentage fields use fractions (0.7 = 70%).":"");
+        DetailTitle.Text=row.Entry.Setting.ToUpperInvariant();DetailNote.Text=row.Entry.Description+"\n\n"+row.Entry.Note+(row.Editable&&row.Choices.Count==0?"\n\nEdit raw values: multipliers use 1.0; percentage fields use fractions (0.7 = 70%).":"");
         DetailSaved.Text=row.SavedDisplay;DetailDraft.Text=row.Pending?row.Input:row.Entry.DisplayValue;
         DetailSource.Text=row.Entry.Source;DetailPath.Text=row.Entry.Path+"\n"+row.Entry.Value;
         ResetSettingButton.IsEnabled=row.Editable&&(row.Pending||row.Entry.Value!=row.Saved);
@@ -140,6 +141,6 @@ public partial class MainWindow
     void TerminalNotes_Changed(object sender,TextChangedEventArgs e){if(NotesBox!=null&&!loading)NotesBox.Text=TerminalNotes.Text;}
     void SettingsGrid_SizeChanged(object sender,SizeChangedEventArgs e)
     {
-        if(SettingsGrid.Columns.Count>0)SettingsGrid.Columns[0].Width=new DataGridLength(Math.Max(160,e.NewSize.Width-278));
+        if(SettingsGrid.Columns.Count>0)SettingsGrid.Columns[0].Width=new DataGridLength(Math.Max(160,e.NewSize.Width-308));
     }
 }

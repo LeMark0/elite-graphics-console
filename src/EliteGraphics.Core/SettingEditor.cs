@@ -5,7 +5,7 @@ namespace EliteGraphics.Core;
 
 public static class SettingEditor
 {
-    public static bool CanEdit(SettingEntry row)=>row.Source!="Installed defaults (snapshot).xml"&&!row.Path.EndsWith("/@MajorVersion")&&!row.Path.EndsWith("/@MinorVersion");
+    public static bool CanEdit(SettingEntry row)=>row.Source!="Installed defaults (snapshot).xml"&&!row.Path.EndsWith("/@MajorVersion")&&!row.Path.EndsWith("/@MinorVersion")&&SettingReference.Field(row.Path)!="LocalisationName";
     public static FileSet Change(FileSet source,SettingEntry row,string value)
     {
         if(!CanEdit(row)||!source.ContainsKey(row.Source))throw new InvalidDataException("This row is reference metadata and cannot be edited.");
@@ -38,8 +38,10 @@ public static class SettingEditor
         var field=Regex.Replace(row.Path.Split('/').Last(),@"\[\d+\]$","");
         if(!(row.Source.EndsWith(".fxcfg")||row.Source is "Settings.xml" or "DisplaySettings.xml"))return [];
         var root=definitions.Length>0?XmlIO.Read(definitions).Root:null;
-        var choices=new List<(string,string)>();
-        for(int i=0;i<16;i++){var raw=i.ToString(CultureInfo.InvariantCulture);var label=SettingsInventory.FormatValue(field,raw,root);if(label!=raw&&!label.StartsWith("Unmapped")&&!label.StartsWith("Unverified")&&(field.EndsWith("Quality")||field is "TextureQualityEx" or "AAMode"))choices.Add((raw,label));}
+        var choices=SettingsInventory.FeatureChoices(field,root).ToList();
+        if(choices.Count==0&&SettingReference.Modes.TryGetValue(field,out var modes))choices.AddRange(modes);
+        if(choices.Count==0 && field is "DirectionalShadowQuality" or "SpotShadowQuality" or "SurfaceSamplerQuality" or "TextureQualityEx")
+            for(int i=0;i<5;i++){var raw=i.ToString(CultureInfo.InvariantCulture);var label=SettingsInventory.FormatValue(field,raw,root);if(!label.StartsWith("Unmapped"))choices.Add((raw,label));}
         if(choices.Count>0&&!choices.Any(x=>x.Item1==row.Value))choices.Add((row.Value,row.DisplayValue));
         return choices;
     }

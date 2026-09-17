@@ -25,6 +25,10 @@ internal static class UiTests
             ["DisplaySettings.xml"]=Encoding.UTF8.GetBytes("<DisplayConfig><ScreenWidth>1920</ScreenWidth><ScreenHeight>1080</ScreenHeight><MaxFramesPerSecond>60</MaxFramesPerSecond><VSync>false</VSync><LimitFrameRate>false</LimitFrameRate></DisplayConfig>"),
             ["Custom.4.4.fxcfg"]=Encoding.UTF8.GetBytes("<Root MajorVersion='4' MinorVersion='4'><EnvironmentQuality>0</EnvironmentQuality><TerrainQuality>0</TerrainQuality><AOQuality>0</AOQuality><VolumetricsQuality>0</VolumetricsQuality><HMDRenderTargetMultiplier>1</HMDRenderTargetMultiplier><SSAAMultiplier>1</SSAAMultiplier><LODDistanceScale>0.7</LODDistanceScale><GpuSchedulerMultiplier>0.7</GpuSchedulerMultiplier><DirectionalShadowQuality>3</DirectionalShadowQuality><SpotShadowQuality>2</SpotShadowQuality><AAMode>1</AAMode><NewUnknown>keep</NewUnknown></Root>"),
             ["GraphicsConfigurationOverride.xml"]=Encoding.UTF8.GetBytes("<GraphicsConfig><GUIColour><Default><MatrixRed>0.4, 0.2, 1</MatrixRed></Default></GUIColour></GraphicsConfig>")};
+        GraphicsModel.Set(files,"Custom.4.4.fxcfg","UpscalingQuality","1");
+        var overrideXml=XmlIO.Read(files["GraphicsConfigurationOverride.xml"]);
+        overrideXml.Root!.Element("GUIColour")!.Element("Default")!.Add(new System.Xml.Linq.XElement("LocalisationName","$QUALITY_ULTRA$"));
+        files["GraphicsConfigurationOverride.xml"]=XmlIO.Write(overrideXml);
         foreach(var(file,bytes)in files)File.WriteAllBytes(Path.Combine(graphics,file),bytes);
         JsonIO.Save(Path.Combine(root,"settings.json"),new LocalSettings{Paths=new AppPaths{Game=game,Graphics=graphics,Legacy=""}});
         var store=new ProfileStore(root);var original=store.Fork("VR FXAA + 4096","VR",files,defs,"test","UI fixture");
@@ -46,7 +50,10 @@ internal static class UiTests
             Call("UpdateInventory");Assert(Row("HMD image quality")==hmd&&hmd.Input=="invalid","Refresh does not discard invalid input");
             var ss=Row("Supersampling");ss.Input="1.2";Assert(!Commit(ss)&&hmd.Input=="invalid","Second edit cannot discard an invalid first edit");
             ss.Input=ss.Entry.Value;hmd.Input=hmd.Entry.Value;Call("RefreshDirty");Assert(Field<Button>("UpdatePresetButton").IsEnabled,"Cancelling pending values restores save availability");
-            var aa=Row("Anti-aliasing");aa.Input="0";Assert(Commit(aa)&&Row("Anti-aliasing").Entry.DisplayValue=="Off","Choice changes reach shared draft");
+            var aa=Row("Anti-aliasing");Assert(aa.Choices.Any(c=>c.Value=="4"&&c.Label=="SMAA"),"Inline AA offers SMAA");
+            aa.Input="4";Assert(Commit(aa)&&Row("Anti-aliasing").Entry.DisplayValue=="SMAA","SMAA commits as raw mode 4");
+            aa=Row("Anti-aliasing");aa.Input="0";Assert(Commit(aa)&&Row("Anti-aliasing").Entry.DisplayValue=="Off","Choice changes reach shared draft");
+            Assert(Row("Anti-aliasing").Entry.Description.Contains("FXAA"),"Rows expose setting explanations");
             var planet=Row("Planet texture size");planet.Input="4096";Assert(Commit(planet),"Effective texture edits selected tier");
             var draft=(FileSet)Call("Edited")!;Assert(GraphicsModel.Texture(draft,defs,"Planets").Value=="4096"&&Encoding.UTF8.GetString(draft["GraphicsConfigurationOverride.xml"]).Contains("0.4, 0.2, 1"),"Texture edit preserves HUD");
             Call("UpdatePreset_Click",window,new RoutedEventArgs());Assert(store.Heads().Single().Number==2,"Update saves revision under original identity");
@@ -57,6 +64,12 @@ internal static class UiTests
             var popup=(Popup)more.Template.FindName("PART_Popup",more);Assert(popup.IsOpen&&more.Items.OfType<MenuItem>().Count()==5,"Terminal menu opens with all maintenance actions");
             CaptureElement((FrameworkElement)popup.Child,Path.Combine(root,"more-menu.png"));more.IsSubmenuOpen=false;Pump();
             var settingsGrid=Field<DataGrid>("SettingsGrid");Assert(settingsGrid.Columns.Sum(c=>c.ActualWidth)<=settingsGrid.ActualWidth,"Both settings columns fit minimum window width");
+            var labelRow=Field<List<TerminalSetting>>("terminalRows").Single(r=>r.Entry.Path.Contains("LocalisationName"));
+            Assert(!labelRow.Editable&&labelRow.ReferenceVisibility==Visibility.Visible&&labelRow.TextVisibility==Visibility.Collapsed&&labelRow.Entry.DisplayValue=="Ultra","Localisation metadata displays a readable read-only value");
+            Field<TextBox>("SettingsSearch").Text="spatial upscaling";Pump();
+            Assert(settingsGrid.Items.OfType<TerminalSetting>().Single().Entry.Setting=="Upscaling","Search finds a setting by its description");
+            Capture(window,Path.Combine(root,"upscaling-description.png"),1120,760);
+            Field<TextBox>("SettingsSearch").Text="";Pump();
             var tabs=Field<TabControl>("MainTabs");tabs.SelectedIndex=2;Pump();Capture(window,Path.Combine(root,"compare.png"),1440,940);
             var review=(Window)Call("CreateApplyReview",GraphicsModel.Diff(files,draft))!;review.Show();Pump();Capture(review,Path.Combine(root,"apply-review.png"),1040,650);review.Close();
             Call("LoadCurrentState");Assert(Field<ListBox>("ProfilesList").SelectedItem==null&&Field<Button>("SaveCurrentButton").Visibility==Visibility.Visible,"Load current clears selection and offers save immediately");

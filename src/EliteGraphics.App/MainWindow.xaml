@@ -51,13 +51,16 @@
         <DataGrid x:Name="SettingsGrid" HorizontalScrollBarVisibility="Disabled" SizeChanged="SettingsGrid_SizeChanged" SelectionChanged="Setting_Selected" SelectionMode="Single" SelectionUnit="FullRow" CanUserSortColumns="False" EnableRowVirtualization="True" VirtualizingPanel.IsVirtualizingWhenGrouping="True">
          <DataGrid.GroupStyle><GroupStyle/></DataGrid.GroupStyle>
          <DataGrid.Columns>
-          <DataGridTextColumn Header="SETTING" Binding="{Binding Title}" Width="*" MinWidth="160" ElementStyle="{StaticResource CellText}"/>
-          <DataGridTemplateColumn Header="VALUE" Width="230"><DataGridTemplateColumn.CellTemplate><DataTemplate>
+          <DataGridTemplateColumn Header="SETTING" Width="*" MinWidth="160"><DataGridTemplateColumn.CellTemplate><DataTemplate>
+           <StackPanel Margin="8,4,10,5"><TextBlock Text="{Binding Title}" TextWrapping="Wrap"/><TextBlock Text="{Binding Entry.Description}" TextWrapping="Wrap" FontSize="11" Opacity="0.8" Margin="0,4,0,0"/></StackPanel>
+          </DataTemplate></DataGridTemplateColumn.CellTemplate></DataGridTemplateColumn>
+          <DataGridTemplateColumn Header="VALUE" Width="260"><DataGridTemplateColumn.CellTemplate><DataTemplate>
            <StackPanel>
             <Grid Margin="0,1"><Grid.ColumnDefinitions><ColumnDefinition Width="28"/><ColumnDefinition Width="*"/><ColumnDefinition Width="28"/></Grid.ColumnDefinitions>
              <Button Style="{StaticResource TriangleButton}" Tag="-1" IsEnabled="{Binding HasChoices}" Visibility="{Binding ArrowVisibility}" Click="StepSetting_Click" ToolTip="Previous value" AutomationProperties.Name="Previous value"><Path Data="M 7,0 L 0,5 L 7,10 Z" Fill="{Binding Foreground,RelativeSource={RelativeSource AncestorType=Button}}"/></Button>
              <ComboBox Grid.Column="1" ItemsSource="{Binding Choices}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding Input,Mode=OneWay}" Visibility="{Binding ChoiceVisibility}" SelectionChanged="InlineChoice_Changed" PreviewMouseWheel="InlineChoice_Wheel" IsEnabled="{Binding Editable}" Margin="0" Padding="4,2" MinHeight="29" AutomationProperties.Name="{Binding Entry.Setting}"/>
              <TextBox Grid.Column="1" Text="{Binding Input,UpdateSourceTrigger=PropertyChanged}" Visibility="{Binding TextVisibility}" IsReadOnly="{Binding ReadOnly}" PreviewKeyDown="Inline_KeyDown" LostKeyboardFocus="Inline_LostFocus" GotKeyboardFocus="Inline_Focus" Margin="0" Padding="5,2" MinHeight="29" ToolTip="{Binding Entry.DisplayValue}" AutomationProperties.Name="{Binding Entry.Setting}"/>
+             <TextBlock Grid.Column="1" Text="{Binding Entry.DisplayValue}" Visibility="{Binding ReferenceVisibility}" TextWrapping="Wrap" VerticalAlignment="Center" Margin="5,2" ToolTip="{Binding Entry.Value}"/>
              <Button Grid.Column="2" Style="{StaticResource TriangleButton}" Tag="1" IsEnabled="{Binding HasChoices}" Visibility="{Binding ArrowVisibility}" Click="StepSetting_Click" ToolTip="Next value" AutomationProperties.Name="Next value"><Path Data="M 0,0 L 7,5 L 0,10 Z" Fill="{Binding Foreground,RelativeSource={RelativeSource AncestorType=Button}}"/></Button>
             </Grid><TextBlock Text="{Binding Error}" Foreground="#FF6655" FontSize="11" Margin="28,0,0,0"><TextBlock.Style><Style TargetType="TextBlock"><Style.Triggers><Trigger Property="Text" Value=""><Setter Property="Visibility" Value="Collapsed"/></Trigger></Style.Triggers></Style></TextBlock.Style></TextBlock>
            </StackPanel>
@@ -97,6 +100,6 @@
     </TabControl>
    </Grid>
   </Grid>
-  <Border Grid.Row="2" Background="#17110B" Padding="20,7"><Grid><TextBlock x:Name="StatusText" Text="LOCAL LIBRARY  /  SETTINGS UNCHANGED" FontSize="11" Foreground="#B8AA98"/><TextBlock Text="ELITE GRAPHICS CONSOLE  /  1.6.2" FontSize="11" HorizontalAlignment="Right" Foreground="#B8AA98"/></Grid></Border>
+  <Border Grid.Row="2" Background="#17110B" Padding="20,7"><Grid><TextBlock x:Name="StatusText" Text="LOCAL LIBRARY  /  SETTINGS UNCHANGED" FontSize="11" Foreground="#B8AA98"/><TextBlock Text="ELITE GRAPHICS CONSOLE  /  1.7.0" FontSize="11" HorizontalAlignment="Right" Foreground="#B8AA98"/></Grid></Border>
  </Grid>
 </Window>

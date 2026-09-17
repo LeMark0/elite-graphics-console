@@ -8,6 +8,7 @@ public sealed record SettingEntry(string Setting, string Value, string Source, s
 {
     public bool CanEdit=>SettingEditor.CanEdit(this);
     public string DisplayValue { get; init; } = Value;
+    public string Description => SettingReference.Describe(Path);
 }
 
 // Enumerate the actual files rather than maintaining a whitelist that hides new game settings.
@@ -20,7 +21,7 @@ public static class SettingsInventory
         ["ParticleEffectsQuality"]="ParticleEffects", ["GalaxyMapQuality"]="GalaxyMap",
         ["TerrainQuality"]="Terrain", ["TerrainLodBlendingQuality"]="TerrainLodBlending",
         ["SurfaceMaterialQuality"]="SurfaceMaterial", ["JetConeQuality"]="JetCones", ["VolumetricsQuality"]="Volumetrics",
-        ["DOFEnabled"]="DOF"
+        ["DOFEnabled"]="DOF", ["GUIColourQuality"]="GUIColour"
     };
     static readonly Dictionary<string, string> Names = new()
     {
@@ -55,6 +56,7 @@ public static class SettingsInventory
 
     public static string FormatValue(string field,string value,XElement? definitions=null,bool selection=true)
     {
+        if(value.StartsWith('$'))return SettingReference.LocalisationLabel(value);
         if(bool.TryParse(value,out var flag))return flag?"On":"Off";
         if(!double.TryParse(value,NumberStyles.Float,CultureInfo.InvariantCulture,out var n)||!double.IsFinite(n))return value;
         string number=n.ToString("0.######",CultureInfo.InvariantCulture);
@@ -62,13 +64,13 @@ public static class SettingsInventory
         {
             var tiers=definitions?.Element(feature)?.Elements().Where(e=>e.Element("LocalisationName")!=null).ToArray();
             if(tiers!=null&&n==Math.Truncate(n)&&n>=0&&n<tiers.Length)
-                return tiers[(int)n].Name.LocalName switch {"Mid"=>"Medium","UltraPlus"=>"Ultra+",var name=>name};
+                return TierLabel(tiers[(int)n]);
             return $"Unmapped quality ({number})";
         }
-        if(selection && field=="AAMode")return number switch {"0"=>"Off","1"=>"FXAA",_=>$"Unverified AA mode ({number})"};
+        if(selection && SettingReference.Modes.TryGetValue(field,out var modes))return modes.FirstOrDefault(m=>m.Value==number).Label ?? $"Unverified mode ({number})";
         if(selection && field is "DirectionalShadowQuality" or "SpotShadowQuality")return number switch {"0"=>"Off","1"=>"Low","2"=>"Medium","3"=>"High","4"=>"Ultra",_=>$"Unmapped quality ({number})"};
         if(selection && field=="SurfaceSamplerQuality")return number switch {"0"=>"Low","1"=>"Medium","2"=>"High","3"=>"Ultra",_=>$"Unmapped quality ({number})"};
-        if(selection && field=="TextureQualityEx")return number switch {"1"=>"Medium","2"=>"High",_=>$"Unmapped quality ({number})"};
+        if(selection && field=="TextureQualityEx")return number switch {"0"=>"Low","1"=>"Medium","2"=>"High",_=>$"Unmapped quality ({number})"};
         if(field is "HMDRenderTargetMultiplier" or "SSAAMultiplier" or "HighResScreenCapScale" or "HeadBobScale")return n.ToString("0.0##",CultureInfo.InvariantCulture)+"×";
         if(field is "LODDistanceScale" or "GpuSchedulerMultiplier" or "FFXCASIntensity")return (n*100).ToString("0.##",CultureInfo.InvariantCulture)+"%";
         if(field=="MaxFramesPerSecond")return number+" FPS";
@@ -76,6 +78,20 @@ public static class SettingsInventory
         if(field is "FOV" or "HumanoidFOV")return n.ToString("0.##",CultureInfo.InvariantCulture)+"°";
         if(selection && (field.EndsWith("Quality")||field is "TextureQualityEx" or "FullScreen" or "StereoscopicMode"))return $"Unmapped mode ({number})";
         return number;
+    }
+
+    static string TierLabel(XElement tier)
+    {
+        var token=tier.Element("LocalisationName")?.Value;
+        if(token?.StartsWith('$')==true)return SettingReference.LocalisationLabel(token);
+        return tier.Name.LocalName switch {"Mid"=>"Medium","UltraPlus"=>"Ultra+","Default"=>"Standard",var name=>name};
+    }
+
+    public static IReadOnlyList<(string Value,string Label)> FeatureChoices(string field,XElement? definitions)
+    {
+        if(!Features.TryGetValue(field,out var feature))return [];
+        return definitions?.Element(feature)?.Elements().Where(e=>e.Element("LocalisationName")!=null)
+            .Select((e,i)=>(i.ToString(CultureInfo.InvariantCulture),TierLabel(e))).ToArray() ?? [];
     }
 
     public static IReadOnlyList<SettingEntry> Build(FileSet files, byte[] definitions, bool allFiles, bool includeDefaults)
@@ -97,9 +113,10 @@ public static class SettingsInventory
                 row.Source=="GraphicsConfigurationOverride.xml" ? "Override; may target an inactive tier. Duplicate paths retained." :
                 row.Source=="Installed defaults (snapshot).xml" ? "Shipped definition, not necessarily selected; overrides can replace it." :
                 row.Source.EndsWith(".fxcfg",StringComparison.OrdinalIgnoreCase) ? "Older/unselected Custom schema; not treated as active." : "Saved configuration value.";
-            if (field=="AAMode") note+=" FXAA mode 1 identified from the user's in-game selection. Other nonzero modes remain unverified.";
+            if (field=="AAMode") note+=" FXAA=1 verified from an in-game save; SMAA=4 correlated with shipped Ultra presets and community configurations. Other modes remain unverified.";
             if (field=="TerrainCheckerboardRenderingEnabled") note+=" If Custom and Settings disagree, precedence is unresolved.";
             if (field=="FFXCASIntensity") note+=" A saved intensity does not prove sharpening is active.";
+            if (field is "UpscalingQuality" or "TextureFilterQuality" or "FullScreen") note+=" Menu labels use an inferred mapping; not independently verified by a current-build game-save comparison. See docs/SETTING-REFERENCE.md.";
             if (field is "DirectionalShadowQuality" or "SpotShadowQuality" or "SurfaceSamplerQuality" or "TextureQualityEx") note+=" Quality labels inferred from shipped Low/Medium/High/Ultra presets.";
             if (row.Source==active && Features.TryGetValue(field,out var feature) && int.TryParse(row.Cells[0].Value,out var tierIndex))
             {

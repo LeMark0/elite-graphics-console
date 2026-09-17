@@ -64,7 +64,7 @@ Optional switches include older schemas and the revision's shipped definition sn
 
 Use the sidebar **+** to create a named preset from current saved game settings, an installed game default, or a saved preset. Current/default capture requires Elite to be closed. Default quality values inherit current display/headset mode, HUD and unspecified newer fields; other XML graphics overrides are excluded from the new copy. Creation does not apply settings.
 
-Version 1.3.1 shows readable quality names, On/Off, multipliers, percentages and units in All settings and Save current. Raw XML values remain in a separate column. Unknown modes are explicit; available quality names are inferred from definition snapshots and shipped presets. FXAA mode 1 was identified from the user's in-game selection.
+Version 1.7.0 adds searchable descriptions beneath each setting, SMAA and additional named mode choices, and all quality tiers from saved definition snapshots. Localisation tokens display as readable reference labels; exact raw values remain in the inspector. Unknown values are retained. See [setting evidence and mapping limitations](docs/SETTING-REFERENCE.md) for verified and inferred mappings.
 
 Version 1.4: selecting a preset opens its settings. **Update this preset** saves changes under the same identity while retaining revision history; **Fork this preset** creates a separate preset from the draft. Protected baselines are fork-only. Unsaved edits prompt before leaving. **History** opens earlier revisions. Design decisions are recorded in docs/adr/001 through 003.
 
