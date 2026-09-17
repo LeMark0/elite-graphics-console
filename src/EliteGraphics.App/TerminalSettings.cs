@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Globalization;
+using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
@@ -20,6 +21,7 @@ public sealed class TerminalSetting : INotifyPropertyChanged
     public required string Saved { get; init; }
     public required string SavedDisplay { get; init; }
     public string? Texture { get; init; }
+    public bool IsStarCount { get; init; }
     public bool Editable { get; init; }
     public bool ReadOnly => !Editable;
     public IReadOnlyList<TerminalChoice> Choices { get; init; } = [];
@@ -48,7 +50,7 @@ public partial class MainWindow
     {
         var key=(row.Setting+" "+row.Path).ToLowerInvariant();
         if(key.Contains("hud")||key.Contains("guicolour")||key.Contains("matrix"))return "HUD";
-        if(key.Contains("planet")||key.Contains("galaxybackground")||key.Contains("galaxy background")||key.Contains("environment quality"))return "PLANETS / GALAXY";
+        if(key.Contains("planet")||key.Contains("galaxy")||key.Contains("environment quality"))return "PLANETS / GALAXY";
         if(key.Contains("terrain")||key.Contains("gpu scheduler")||key.Contains("loddistance"))return "TERRAIN";
         if(new[]{"hmd","stereo","supersampling","anti-alias","upscal","cas intensity","ipd"}.Any(key.Contains))return "VR / RENDERING";
         if(new[]{"shadow","occlusion","bloom","blur","effect","volumetric","material","reflection","depth of field"}.Any(key.Contains))return "LIGHTING / EFFECTS";
@@ -63,6 +65,12 @@ public partial class MainWindow
             return new TerminalSetting{Entry=entry,Category=Category(entry),Saved=original.Value,SavedDisplay=original.DisplayValue,
                 Editable=entry.CanEdit&&selected?.Historical==false,Choices=SettingEditor.Choices(entry,selectedDefinitions).Select(c=>new TerminalChoice(c.Value,c.Label)).ToArray(),OnInput=InlineInputChanged};
         }).ToList();
+        if(selectedFiles!=null)
+        {
+            EffectiveValue ReadStars(FileSet data){try{return GraphicsModel.StarCount(data,selectedDefinitions);}catch(Exception ex) when(ex is InvalidDataException or KeyNotFoundException){return new("Visible star count","Unavailable",ex.Message);}}
+            var stars=ReadStars(files);var original=ReadStars(selectedFiles);
+            terminalRows.Add(new TerminalSetting{Entry=new SettingEntry("Visible star count",stars.Value,stars.Source,"GalaxyMap/StarInstanceCount","Effective count at the selected Galaxy map quality tier. Editing updates only this tier's star count; other overrides are preserved.") {DisplayValue=stars.Value},IsStarCount=true,Category="PLANETS / GALAXY",Saved=original.Value,SavedDisplay=original.Value,Editable=selected?.Historical==false&&stars.Value!="Unavailable",OnInput=InlineInputChanged});
+        }
         if(selectedDefinitions.Length>0 && selectedFiles!=null)
             foreach(var (feature,label) in new[]{("Planets","Planet texture size"),("GalaxyBackground","Galaxy background texture size")})
             {
@@ -94,11 +102,16 @@ public partial class MainWindow
         DetailTitle.Text=row.Entry.Setting.ToUpperInvariant();DetailNote.Text=row.Entry.Description+"\n\n"+row.Entry.Note+(row.Editable&&row.Choices.Count==0?"\n\nEdit raw values: multipliers use 1.0; percentage fields use fractions (0.7 = 70%).":"");
         DetailSaved.Text=row.SavedDisplay;DetailDraft.Text=row.Pending?row.Input:row.Entry.DisplayValue;
         DetailSource.Text=row.Entry.Source;DetailPath.Text=row.Entry.Path+"\n"+row.Entry.Value;
-        ResetSettingButton.IsEnabled=row.Editable&&(row.Pending||row.Entry.Value!=row.Saved);
+        ResetSettingButton.IsEnabled=row.Editable&&(row.Pending||row.Entry.Value!=row.Saved)&&(!row.IsStarCount||int.TryParse(row.Saved,out _));
     }
     FileSet ChangeInline(TerminalSetting row,string value)
     {
         var files=Edited();
+        if(row.IsStarCount)
+        {
+            if(!int.TryParse(value,NumberStyles.Integer,CultureInfo.InvariantCulture,out var count)||count<0)throw new ArgumentException("Enter a whole-number star count from 0 to 2147483647. Large counts are not performance-tested.");
+            GraphicsModel.SetStarCount(files,selectedDefinitions,count);return files;
+        }
         if(row.Texture==null)return SettingEditor.Change(files,row.Entry,value);
         if(!int.TryParse(value,out var size))throw new ArgumentException("Choose a texture size.");
         GraphicsModel.SetTexture(files,selectedDefinitions,row.Texture,size);return files;
@@ -141,6 +154,10 @@ public partial class MainWindow
     void TerminalNotes_Changed(object sender,TextChangedEventArgs e){if(NotesBox!=null&&!loading)NotesBox.Text=TerminalNotes.Text;}
     void SettingsGrid_SizeChanged(object sender,SizeChangedEventArgs e)
     {
-        if(SettingsGrid.Columns.Count>0)SettingsGrid.Columns[0].Width=new DataGridLength(Math.Max(160,e.NewSize.Width-308));
+        if(SettingsGrid.Columns.Count<3)return;
+        var available=Math.Max(0,e.NewSize.Width-48-260);
+        var nameWidth=Math.Clamp(available*0.4,150,250);
+        SettingsGrid.Columns[0].Width=new DataGridLength(nameWidth);
+        SettingsGrid.Columns[2].Width=new DataGridLength(Math.Max(180,available-nameWidth));
     }
 }

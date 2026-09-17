@@ -65,6 +65,8 @@ public static class PresetComparison
                 values.FirstOrDefault() ?? XmlIO.Read(source.Definitions).Root?.Element("Planets")?.Element(tier)?.Element("AtmosphereSteps")?.Value ?? "Unknown";
         }
         catch (Exception ex) when (ex is InvalidDataException or KeyNotFoundException) { result[("Effective textures (inferred)", "Planet atmosphere steps")] = "Unknown"; }
+        try { result[("Effective galaxy (inferred)","Visible star count")]=GraphicsModel.StarCount(source.Files,source.Definitions).Value; }
+        catch(Exception ex) when(ex is InvalidDataException or KeyNotFoundException) { result[("Effective galaxy (inferred)","Visible star count")]="Unknown"; }
         foreach (var name in new[] { "Settings.xml", "DisplaySettings.xml" })
             if (source.Files.TryGetValue(name, out var bytes))
                 foreach (var node in XmlIO.Read(bytes).Root!.Elements()) result[(name, node.Name.LocalName)] = Display(node.Name.LocalName, node.Value, source.Definitions);

@@ -101,7 +101,7 @@ public static class SettingReference
         ["NebulasInBackgroundCount"]="Nebula count requested for the background by this tier. Actual visibility depends on position and rendering limits.",
         ["LowResNebulasCount"]="Low-resolution nebula allowance in this tier. Increasing it can add background detail and rendering work.",
         ["HighResNebulasCount"]="High-resolution nebula allowance in this tier. Increasing it can use more memory and rendering work.",
-        ["StarInstanceCount"]="Star instance budget for this feature and tier. Higher values can show more stars at additional rendering cost.",
+        ["StarInstanceCount"]="Visible-star budget for the galaxy-map tier; community reports show a denser flight sky too. Higher counts can affect map FPS and loading. 180,000 is an experimental report, not a recommended VR default.",
         ["PresetName"]="Game configuration preset identifier. This is separate from the name of a preset in this app's library.",
         ["Planets"]="Effective planet texture size at the selected environment tier. Higher values can sharpen orbital views and use more VRAM.",
         ["GalaxyBackground"]="Effective galaxy background texture size at the selected environment tier. Higher values can sharpen the sky and use more VRAM.",

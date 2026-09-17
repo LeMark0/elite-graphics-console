@@ -1,5 +1,15 @@
 # Settings reference and evidence
 
+## Visible star count
+
+The [linked author's experiment](https://www.reddit.com/r/EliteDangerous/comments/1wh6y9w/sky_is_a_lot_prettier_with_180k_stars_visible/) changes `GalaxyMap/Low|Medium|High/StarInstanceCount` to 180000. The author reports a denser flight sky with no observed flight FPS/loading penalty on their system, but lower galaxy-map FPS while moving quickly near the core. This is anecdotal, not a measurement on the user's RTX 3080 Ti / Quest 2 setup. Loading and VR frame times still need an A/B test.
+
+Local Odyssey definitions inspected for this release specify 2000 at Low and Medium, and 4000 at High. The user's existing High override was already 5000. The app resolves the active tier using `GalaxyMapQuality`; it does not assume High or use `EnvironmentQuality`.
+
+The effective Visible star count row is available without an existing override. Editing updates only StarInstanceCount in the selected tier, preserving other tiers, nebula settings, duplicate sections and unrelated customisations. Conflicting duplicate counts display as Ambiguous; an explicit edit assigns the chosen value to each selected-tier star-count node. Unknown selectors are unavailable, not guessed. Non-negative 32-bit integers are accepted as XML values; this is not a tested engine limit or a promise of safe performance at extreme counts. No value is applied automatically.
+
+Suggested evaluation: fork a baseline, increase the count moderately, then compare the same sky position, galaxy-map pan and repeated jumps. Record VR frame times and loading durations; judge dense and sparse sky regions separately. Return to the baseline preset for rollback.
+
 Reviewed 18 September 2026. Descriptions explain purpose, not measured performance gains. No running-game settings were changed to collect evidence.
 
 ## Primary local evidence

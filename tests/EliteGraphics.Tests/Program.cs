@@ -95,5 +95,34 @@ Test("Explicit mode choices do not decode override internals",()=>{
     Assert(SettingsInventory.FormatValue("UpscalingQuality","2",null,false)=="2");
     Assert(SettingEditor.Choices(row with {Path="Root/TextureFilterQuality[1]"},definitions).Count==5);
 });
+byte[] StarDefinitions()=>Encoding.UTF8.GetBytes("<GraphicsConfig><GalaxyMap><Low><LocalisationName>$QUALITY_LOW;</LocalisationName><StarInstanceCount>2000</StarInstanceCount></Low><Medium><LocalisationName>$QUALITY_MEDIUM;</LocalisationName><StarInstanceCount>2000</StarInstanceCount></Medium><High><LocalisationName>$QUALITY_HIGH;</LocalisationName><StarInstanceCount>4000</StarInstanceCount></High></GalaxyMap></GraphicsConfig>");
+FileSet StarBaseline(){var files=Baseline();GraphicsModel.Set(files,GraphicsModel.ActiveFile(files),"GalaxyMapQuality","2");return files;}
+Test("Star count resolves GalaxyMapQuality independently of EnvironmentQuality",()=>{
+    var files=StarBaseline();var before=files.Fingerprint();Assert(GraphicsModel.StarCount(files,StarDefinitions()).Value=="4000");Assert(files.Fingerprint()==before);
+    GraphicsModel.Set(files,GraphicsModel.ActiveFile(files),"GalaxyMapQuality","0");Assert(GraphicsModel.StarCount(files,StarDefinitions()).Value=="2000");
+});
+Test("Star count override creates only the selected tier field and preserves customisations",()=>{
+    var files=StarBaseline();var previous=files.Clone();GraphicsModel.SetStarCount(files,StarDefinitions(),180000);
+    var changes=GraphicsModel.Diff(previous,files);Assert(changes.Count==1&&changes[0].Path.EndsWith("/GalaxyMap[1]/High[1]/StarInstanceCount[1]"));
+    Assert(GraphicsModel.StarCount(files,StarDefinitions()).Value=="180000");
+    var rows=PresetComparison.Build([new("Before",previous,StarDefinitions()),new("After",files,StarDefinitions())],false,true);
+    Assert(rows.Single(r=>r.Setting=="Visible star count").Cells.Select(c=>c.Value).SequenceEqual(new[]{"4000","180000"}));
+});
+Test("Star count reports conflicting duplicates and changes only selected star nodes",()=>{
+    var files=StarBaseline();files["GraphicsConfigurationOverride.xml"]=Encoding.UTF8.GetBytes("<GraphicsConfig><!--keep--><GalaxyMap><Low><StarInstanceCount>2000</StarInstanceCount></Low><High><StarInstanceCount>5000</StarInstanceCount><NebulasCount>100</NebulasCount></High></GalaxyMap><GalaxyMap><High><StarInstanceCount>6000</StarInstanceCount><StarInstanceCount>7000</StarInstanceCount><LocalDustBrightness>0.05</LocalDustBrightness></High></GalaxyMap></GraphicsConfig>");
+    Assert(GraphicsModel.StarCount(files,StarDefinitions()).Value=="Ambiguous");var previous=files.Clone();
+    GraphicsModel.SetStarCount(files,StarDefinitions(),60000);Assert(GraphicsModel.StarCount(files,StarDefinitions()).Value=="60000");
+    var changes=GraphicsModel.Diff(previous,files);Assert(changes.Count==3&&changes.All(c=>c.Path.Contains("/High[1]/StarInstanceCount[")));
+    Assert(Encoding.UTF8.GetString(files["GraphicsConfigurationOverride.xml"]).Contains("<!--keep-->"));
+});
+Test("Star count validates unresolved tiers and numeric input without partial changes",()=>{
+    var files=StarBaseline();var before=files.Fingerprint();Throws(()=>GraphicsModel.SetStarCount(files,StarDefinitions(),-1));Assert(files.Fingerprint()==before);
+    GraphicsModel.Set(files,GraphicsModel.ActiveFile(files),"GalaxyMapQuality","99");before=files.Fingerprint();Throws(()=>GraphicsModel.SetStarCount(files,StarDefinitions(),60000));Assert(files.Fingerprint()==before);
+    Throws(()=>GraphicsModel.StarCount(StarBaseline(),[]));
+    files=StarBaseline();files.Remove("GraphicsConfigurationOverride.xml");GraphicsModel.SetStarCount(files,StarDefinitions(),60000);
+    var row=SettingsInventory.Build(files,StarDefinitions(),false,false).Single(r=>r.Path.EndsWith("StarInstanceCount[1]"));
+    foreach(var invalid in new[]{"-1","1.5","180k","2147483648","1e5"})Throws(()=>SettingEditor.Change(files,row,invalid));
+    Assert(GraphicsModel.StarCount(files,StarDefinitions()).Value=="60000");
+});
 int failures=0;foreach(var (name,action) in tests){try{action();Console.WriteLine("PASS "+name);}catch(Exception e){failures++;Console.WriteLine("FAIL "+name+" — "+e.Message);}}
 Console.WriteLine($"{tests.Count-failures}/{tests.Count} tests passed. Isolated fixtures: {root}");return failures==0?0:1;

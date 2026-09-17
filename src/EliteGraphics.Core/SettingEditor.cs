@@ -9,6 +9,7 @@ public static class SettingEditor
     public static FileSet Change(FileSet source,SettingEntry row,string value)
     {
         if(!CanEdit(row)||!source.ContainsKey(row.Source))throw new InvalidDataException("This row is reference metadata and cannot be edited.");
+        if(SettingReference.Field(row.Path)=="StarInstanceCount"&&(!int.TryParse(value,NumberStyles.Integer,CultureInfo.InvariantCulture,out var starCount)||starCount<0))throw new ArgumentException("Enter a non-negative whole-number star count within the 32-bit integer range.");
         if(bool.TryParse(row.Value,out _)&&!bool.TryParse(value,out _))throw new ArgumentException("Enter true or false.");
         if(double.TryParse(row.Value,NumberStyles.Float,CultureInfo.InvariantCulture,out _))
         {

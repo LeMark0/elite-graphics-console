@@ -19,6 +19,7 @@ internal static class UiTests
         var root=Path.Combine(Path.GetTempPath(),"egc-ui-"+Guid.NewGuid().ToString("N"));Directory.CreateDirectory(root);
         var game=Path.Combine(root,"game");var graphics=Path.Combine(root,"graphics");Directory.CreateDirectory(game);Directory.CreateDirectory(graphics);
         var defs=Encoding.UTF8.GetBytes("<GraphicsConfig><Environment><Low><LocalisationName>L</LocalisationName><Item><Feature>Planets</Feature><QualitySetting>0</QualitySetting></Item><Item><Feature>GalaxyBackground</Feature><QualitySetting>0</QualitySetting></Item></Low></Environment><Planets><Low><TextureSize>1024</TextureSize></Low></Planets><GalaxyBackground><Low><TextureSize>1024</TextureSize></Low></GalaxyBackground><Terrain><Low><LocalisationName>L</LocalisationName></Low></Terrain><HBAO><Off><LocalisationName>O</LocalisationName></Off></HBAO><Volumetrics><Low><LocalisationName>L</LocalisationName></Low></Volumetrics></GraphicsConfig>");
+        var starDefs=XmlIO.Read(defs);starDefs.Root!.Add(System.Xml.Linq.XElement.Parse("<GalaxyMap><Low><LocalisationName>$QUALITY_LOW;</LocalisationName><StarInstanceCount>2000</StarInstanceCount></Low></GalaxyMap>"));defs=XmlIO.Write(starDefs);
         File.WriteAllBytes(Path.Combine(game,"GraphicsConfiguration.xml"),defs);
         var files=new FileSet{
             ["Settings.xml"]=Encoding.UTF8.GetBytes("<GraphicsOptions><PresetName>Custom</PresetName><StereoscopicMode>3</StereoscopicMode></GraphicsOptions>"),
@@ -26,6 +27,7 @@ internal static class UiTests
             ["Custom.4.4.fxcfg"]=Encoding.UTF8.GetBytes("<Root MajorVersion='4' MinorVersion='4'><EnvironmentQuality>0</EnvironmentQuality><TerrainQuality>0</TerrainQuality><AOQuality>0</AOQuality><VolumetricsQuality>0</VolumetricsQuality><HMDRenderTargetMultiplier>1</HMDRenderTargetMultiplier><SSAAMultiplier>1</SSAAMultiplier><LODDistanceScale>0.7</LODDistanceScale><GpuSchedulerMultiplier>0.7</GpuSchedulerMultiplier><DirectionalShadowQuality>3</DirectionalShadowQuality><SpotShadowQuality>2</SpotShadowQuality><AAMode>1</AAMode><NewUnknown>keep</NewUnknown></Root>"),
             ["GraphicsConfigurationOverride.xml"]=Encoding.UTF8.GetBytes("<GraphicsConfig><GUIColour><Default><MatrixRed>0.4, 0.2, 1</MatrixRed></Default></GUIColour></GraphicsConfig>")};
         GraphicsModel.Set(files,"Custom.4.4.fxcfg","UpscalingQuality","1");
+        GraphicsModel.Set(files,"Custom.4.4.fxcfg","GalaxyMapQuality","0");
         var overrideXml=XmlIO.Read(files["GraphicsConfigurationOverride.xml"]);
         overrideXml.Root!.Element("GUIColour")!.Element("Default")!.Add(new System.Xml.Linq.XElement("LocalisationName","$QUALITY_ULTRA$"));
         files["GraphicsConfigurationOverride.xml"]=XmlIO.Write(overrideXml);
@@ -56,20 +58,25 @@ internal static class UiTests
             Assert(Row("Anti-aliasing").Entry.Description.Contains("FXAA"),"Rows expose setting explanations");
             var planet=Row("Planet texture size");planet.Input="4096";Assert(Commit(planet),"Effective texture edits selected tier");
             var draft=(FileSet)Call("Edited")!;Assert(GraphicsModel.Texture(draft,defs,"Planets").Value=="4096"&&Encoding.UTF8.GetString(draft["GraphicsConfigurationOverride.xml"]).Contains("0.4, 0.2, 1"),"Texture edit preserves HUD");
+            var stars=Row("Visible star count");Assert(stars.Entry.Value=="2000"&&stars.Editable,"Star count shows an editable inherited value without an override");
+            stars.Input="180k";Assert(!Commit(stars)&&stars.Error.Length>0,"Invalid star count stays pending with an error");
+            stars.Input="60000";Assert(Commit(stars)&&GraphicsModel.StarCount((FileSet)Call("Edited")!,defs).Value=="60000","Star count edit creates the selected tier override in the draft");
             Call("UpdatePreset_Click",window,new RoutedEventArgs());Assert(store.Heads().Single().Number==2,"Update saves revision under original identity");
+            Assert(Row("Visible star count").Entry.Value=="60000","Star count survives saving and reloading the preset");
             Assert(Row("HMD image quality").Entry.Value=="1.1"&&Row("Anti-aliasing").Entry.Value=="0","Saved revision reloads edited values");
             Capture(window,Path.Combine(root,"settings.png"),1440,940);
             Capture(window,Path.Combine(root,"settings-small.png"),1120,760);
             var more=Visuals<Menu>(window).Single().Items.OfType<MenuItem>().Single();more.IsSubmenuOpen=true;Pump();
             var popup=(Popup)more.Template.FindName("PART_Popup",more);Assert(popup.IsOpen&&more.Items.OfType<MenuItem>().Count()==5,"Terminal menu opens with all maintenance actions");
             CaptureElement((FrameworkElement)popup.Child,Path.Combine(root,"more-menu.png"));more.IsSubmenuOpen=false;Pump();
-            var settingsGrid=Field<DataGrid>("SettingsGrid");Assert(settingsGrid.Columns.Sum(c=>c.ActualWidth)<=settingsGrid.ActualWidth,"Both settings columns fit minimum window width");
+            var settingsGrid=Field<DataGrid>("SettingsGrid");Assert(settingsGrid.Columns.Select(c=>c.Header.ToString()).SequenceEqual(new[]{"SETTING","VALUE","DESCRIPTION"})&&settingsGrid.Columns.Sum(c=>c.ActualWidth)<=settingsGrid.ActualWidth,"Setting, value and description columns fit minimum window width");
             var labelRow=Field<List<TerminalSetting>>("terminalRows").Single(r=>r.Entry.Path.Contains("LocalisationName"));
             Assert(!labelRow.Editable&&labelRow.ReferenceVisibility==Visibility.Visible&&labelRow.TextVisibility==Visibility.Collapsed&&labelRow.Entry.DisplayValue=="Ultra","Localisation metadata displays a readable read-only value");
             Field<TextBox>("SettingsSearch").Text="spatial upscaling";Pump();
             Assert(settingsGrid.Items.OfType<TerminalSetting>().Single().Entry.Setting=="Upscaling","Search finds a setting by its description");
             Capture(window,Path.Combine(root,"upscaling-description.png"),1120,760);
             Field<TextBox>("SettingsSearch").Text="";Pump();
+            Field<TextBox>("SettingsSearch").Text="Visible star count";Pump();Capture(window,Path.Combine(root,"star-count.png"),1120,760);Field<TextBox>("SettingsSearch").Text="";Pump();
             var tabs=Field<TabControl>("MainTabs");tabs.SelectedIndex=2;Pump();Capture(window,Path.Combine(root,"compare.png"),1440,940);
             var review=(Window)Call("CreateApplyReview",GraphicsModel.Diff(files,draft))!;review.Show();Pump();Capture(review,Path.Combine(root,"apply-review.png"),1040,650);review.Close();
             Call("LoadCurrentState");Assert(Field<ListBox>("ProfilesList").SelectedItem==null&&Field<Button>("SaveCurrentButton").Visibility==Visibility.Visible,"Load current clears selection and offers save immediately");
