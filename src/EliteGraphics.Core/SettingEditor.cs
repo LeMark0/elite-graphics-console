@@ -13,7 +13,11 @@ public static class SettingEditor
         if(double.TryParse(row.Value,NumberStyles.Float,CultureInfo.InvariantCulture,out _))
         {
             if(!double.TryParse(value,NumberStyles.Float,CultureInfo.InvariantCulture,out var n)||!double.IsFinite(n))throw new ArgumentException("Enter a finite number using a decimal point.");
-            if(long.TryParse(row.Value,out _)&&n!=Math.Truncate(n))throw new ArgumentException("Enter a whole number.");
+            var field=Regex.Replace(row.Path.Split('/').Last(),@"\[\d+\]$","");
+            var fractional=field is "HMDRenderTargetMultiplier" or "SSAAMultiplier" or "LODDistanceScale" or "GpuSchedulerMultiplier" or "FFXCASIntensity" or "GammaOffset" or "FOV" or "HumanoidFOV" or "IPDAmount" or "HeadBobScale" or "StereoFocalDistance";
+            if(!fractional&&long.TryParse(row.Value,out _)&&n!=Math.Truncate(n))throw new ArgumentException("Enter a whole number.");
+            if(field is "HMDRenderTargetMultiplier" or "SSAAMultiplier" && (n<0.5||n>2))throw new ArgumentException("Enter a multiplier between 0.5 and 2.0.");
+            if(field is "LODDistanceScale" or "GpuSchedulerMultiplier" or "FFXCASIntensity" && (n<0||n>1))throw new ArgumentException("Enter a fraction between 0 and 1 (0.7 = 70%).");
         }
         var result=source.Clone();
         if(row.Source.EndsWith(".start",StringComparison.OrdinalIgnoreCase)){result[row.Source]=Encoding.UTF8.GetBytes(value);return result;}

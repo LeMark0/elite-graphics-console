@@ -12,10 +12,10 @@ Close Elite normally before the first launch. The app captures the existing grap
 
 ## Everyday workflow
 
-1. Select a revision. Its cards show texture values resolved from the saved quality selector, installed definitions and existing XML overrides.
-2. Edit the main controls or use **Advanced XML editor**. Save creates a new revision; the baseline remains intact.
+1. Select a revision. **Settings** shows categorized editable rows; planet and galaxy textures resolve the selected tier from saved definitions and overrides.
+2. Edit a value inline (Enter or focus loss commits; Esc cancels), or use **More → Advanced XML editor**. **Update this preset** saves a revision; **Fork this preset** creates a new preset. Protected baselines are fork-only.
 3. Open **Compare** and select two or more presets. Each selected revision has its own column; amber cells differ from the first column. **Differences only** hides equal settings. The resolved view shows friendly quality labels and inferred effective planet/background values; **Raw XML / all overrides** includes older `.fxcfg` files and indexed duplicate elements. Collapse the preset picker for more table space. Selections are remembered. Formatting-only changes are omitted from this table; the apply preview still reports them.
-4. With Elite closed, choose **Review & apply selected** and inspect the final diff. Verified backups are retained for **Restore previous apply**.
+4. With Elite closed, choose **Apply preset** in the header and inspect the final diff. Verified backups are retained for **More → Restore previous apply**.
 5. Launch Elite through your usual route. This app does not launch a VR runtime or modify driver/mod configuration.
 6. Record matching benchmark runs before deciding whether a candidate improves the experience.
 
@@ -47,6 +47,7 @@ On Windows with .NET SDK 8.0.424 or a newer 8.0 servicing SDK:
 ```powershell
 ./build.ps1
 ./build.ps1 -Publish
+./build.ps1 -Publish -UiTests
 ```
 
 The first command runs the isolated core tests and builds WPF. `-Publish` also makes a self-contained Windows x64 ZIP and SHA-256 file in `artifacts`. `-DotnetPath` accepts a portable SDK executable. The included GitHub Actions template runs the same checks on Windows when enabled; uploading it requires GitHub CLI workflow permission. See [architecture](docs/ARCHITECTURE.md) for maintenance details.
@@ -70,3 +71,9 @@ Version 1.4: selecting a preset opens its settings. **Update this preset** saves
 Version 1.4.1: **Load current game settings…** creates and selects a named snapshot of saved game settings. **Check applied status** checks disk without discarding edits. The preset header shows Apply and APPLIED/NOT APPLIED (exact saved-file match); a running game may still have older settings in memory. Unsaved drafts are labelled separately. See ADR 004.
 
 Version 1.5: Load current game settings opens an unsaved workspace and clears preset selection, without creating a preset. Save as preset works immediately or after edits. An asterisk marks edited settings. All settings offers Edit buttons and double-click editing with labelled known choices; changes share the Configure draft. Delete preset requires confirmation and hides all its revisions; immutable data remains for benchmarks/recovery in profiles and deleted-presets.json. Applied game settings stay unchanged. See ADRs 005 and 006.
+
+### Terminal redesign (1.6)
+
+The single **Settings** surface replaces Configure and All settings. Search or choose a category, edit choices with the triangle controls/dropdown, and edit raw numeric/text values inline. The inspector shows readable saved/draft values, units, source and exact XML path. Known percentages use raw fractions in the editor (0.7 = 70%); this is stated in the inspector. Unknown fields remain available without invented enum labels. **Reset value** restores the captured value; **Discard changes** restores the entire draft exactly. Effective texture resets may retain an explicit override equal to the captured value.
+
+Pending invalid edits stay visible and block save/apply. Use Escape to cancel the active text edit. Applied status refers to saved game files, not measured runtime output. The sidebar **Load current settings** opens a transient workspace; **+** creates a preset from current files, game defaults or a saved preset. Maintenance actions are under **More** and **Library tools**. Comparisons, performance pages and dialogs share the terminal palette. Animations are deferred.

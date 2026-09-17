@@ -114,7 +114,7 @@ public partial class MainWindow : Window
         var same=known&&selected!.Hashes.Count==checkedGameFiles!.Count&&selected.Hashes.All(x=>checkedGameFiles.TryGetValue(x.Key,out var bytes)&&FileSet.Hash(bytes)==x.Value);
         var dirty=IsDirty;
         AppliedLabel.Text=currentWorkspace?(dirty?"UNSAVED CHANGES":"CURRENT GAME SETTINGS"):dirty?"UNSAVED CHANGES":!known?"STATUS UNKNOWN":same?"APPLIED":"NOT APPLIED";
-        AppliedBadge.Background=new SolidColorBrush(!dirty&&same?Color.FromRgb(24,83,66):Color.FromRgb(67,49,29));
+        AppliedBadge.Background=new SolidColorBrush(!dirty&&same?Color.FromRgb(20,43,46):Color.FromRgb(52,34,15));
         LiveStatus.Text=(currentWorkspace?(dirty?"Edited current settings — save as a preset to keep or apply changes.":"Loaded current settings — no preset created."):dirty?(same?"Saved revision is applied; your edits are not.":"Your edits are not applied. Update or fork to apply them."):same?"This preset matches the saved game settings.":known?"This preset differs from the saved game settings.":"")+" "+checkedGameDetail;
         HeaderApplyButton.IsEnabled=!currentWorkspace&&known&&!same&&!dirty&&selected?.Historical==false;
         HeaderApplyButton.Content=currentWorkspace?"Save preset to apply":!dirty&&same?"Already applied":"Apply preset";
@@ -122,28 +122,23 @@ public partial class MainWindow : Window
     }
     void UpdateInventory()
     {
-        if(SettingsGrid==null||settings==null)return;
+        if(SettingsGrid==null||settings==null||InlinePending)return;
         var live=false;
         var files=selectedFiles; if(selected!=null&&!loading){try{files=Edited();}catch(ArgumentException){files=draftFiles??selectedFiles;}catch(InvalidDataException){files=draftFiles??selectedFiles;}catch(InvalidOperationException){files=draftFiles??selectedFiles;}}
-        if(files==null){inventory=[];inventoryContext="Select a preset.";FilterInventory();return;}
+        if(files==null){terminalRows=[];inventory=[];inventoryContext="Select a preset.";FilterInventory();return;}
         var definitions=live?settings.Paths.ReadDefinitions():selectedDefinitions;
         inventory=SettingsInventory.Build(files,definitions,InspectOlder.IsChecked==true,InspectDefaults.IsChecked==true);
+        BuildTerminalRows(files);
         inventoryContext=(live?"Current saved files (not unsaved game-menu values)":selected!.DisplayName+(IsDirty?" · Unsaved draft":""))+" · All controls shown; unavailable/missing menu values cannot be inferred.";
         FilterInventory();
     }
-    void FilterInventory()
-    {
-        if(SettingsGrid==null)return;
-        var query=SettingsSearch.Text.Trim();
-        var rows=inventory.Where(r=>query.Length==0||string.Join(" ",r.Setting,r.DisplayValue,r.Value,r.Source,r.Path,r.Note).Contains(query,StringComparison.OrdinalIgnoreCase)).ToArray();
-        SettingsGrid.ItemsSource=rows;InventorySummary.Text=$"{rows.Length} / {inventory.Count} values · "+inventoryContext;
-    }
+    void FilterInventory(){if(!InlinePending)ShowTerminalRows();}
     void SettingsSearch_Changed(object sender,TextChangedEventArgs e)=>FilterInventory();
     void InventoryOptions_Changed(object sender,RoutedEventArgs e)=>Guard(UpdateInventory);
     void Profile_Selected(object sender,SelectionChangedEventArgs e){if(loading||ProfilesList.SelectedItem is not ProfileRevision p)return;Guard(()=>{if(!ConfirmLeave()){loading=true;ProfilesList.SelectedItem=currentWorkspace?null:selected;loading=false;return;}LoadProfile(p);MainTabs.SelectedItem=ConfigureTab;});}
     void LoadProfile(ProfileRevision profile,FileSet? current=null,byte[]? definitions=null)
     {
-        MainTabs.IsEnabled=true;loading=true;draftFiles=null;currentWorkspace=current!=null;selected=profile;selectedFiles=current??store.Files(profile.Id);selectedDefinitions=definitions??store.Definitions(profile.Id);
+        MainTabs.IsEnabled=true;loading=true;terminalRows=[];TerminalNotes.Text="";draftFiles=null;currentWorkspace=current!=null;selected=profile;selectedFiles=current??store.Files(profile.Id);selectedDefinitions=definitions??store.Definitions(profile.Id);
         ProfileTitle.Text=profile.Name;ProfileSubtitle.Text=$"Revision {profile.Number:000} · {profile.Mode} · {profile.Created.ToLocalTime():dd MMM yyyy HH:mm} · {profile.GameBuild} · {(profile.Protected?"Protected original / edit a derivative":profile.Status)}";
         if(currentWorkspace)ProfileSubtitle.Text="Current game settings · captured from saved files · not saved as a preset";
         NameBox.Text=profile.Name;ModeBox.SelectedItem=profile.Mode;NotesBox.Text="";
@@ -168,7 +163,7 @@ public partial class MainWindow : Window
     }
     FileSet Edited()
     {
-        NeedSelection();if(EditorKey()==editorKey)return (draftFiles??selectedFiles!).Clone();if(selected!.Historical)throw new InvalidOperationException("Migrate a historical profile to the current schema before editing.");
+        NeedSelection();if(InlinePending&&!inlineCommitting)throw new InvalidOperationException("Finish the inline edit with Enter, or cancel with Esc.");if(EditorKey()==editorKey)return (draftFiles??selectedFiles!).Clone();if(selected!.Historical)throw new InvalidOperationException("Migrate a historical profile to the current schema before editing.");
         var data=(draftFiles??selectedFiles!).Clone();string active=GraphicsModel.ActiveFile(data);
         void SetNumber(string file,string field,double value){var current=XmlIO.Read(data[file]).Root?.Element(field)?.Value;if(double.TryParse(current,NumberStyles.Float,CultureInfo.InvariantCulture,out var existing)&&existing==value)return;GraphicsModel.Set(data,file,field,value.ToString("0.######",CultureInfo.InvariantCulture));}
         if(EnvironmentBox.SelectedIndex<0||TerrainBox.SelectedIndex<0||AoBox.SelectedIndex<0||VolumetricBox.SelectedIndex<0)throw new ArgumentException("Select valid quality tiers.");
@@ -190,8 +185,8 @@ public partial class MainWindow : Window
         NoRecording();NeedSavedPreset();if(selected!.Historical)throw new InvalidOperationException("Historical snapshots must be migrated first.");if(GameRunning())throw new InvalidOperationException("Close Elite Dangerous first.");
         if(IsDirty||Edited().Fingerprint()!=selectedFiles!.Fingerprint())throw new InvalidOperationException("The editor contains unsaved changes. Update or fork this preset before applying it.");
         var current=FileSet.Read(settings.Paths.Graphics);var expected=current.Fingerprint();var validated=store.Files(selected.Id);var defs=store.Definitions(selected.Id);
-        var changes=GraphicsModel.Diff(current,validated);var text="Only the listed profile files will be replaced. Unrelated files, driver settings and the VR runtime are preserved. A verified rollback snapshot is saved first.\n\n"+DiffText(changes);
-        if(!Review("Apply "+selected.DisplayName,text,"Apply these files"))return;
+        var changes=GraphicsModel.Diff(current,validated);
+        if(!ReviewApply(changes))return;
         apply.Apply(settings.Paths.Graphics,validated,expected,defs,settings.Paths.ReadDefinitions(),selected.GameBuild,settings.Paths.Build());settings.LastAppliedFingerprint=FileSet.Read(settings.Paths.Graphics).Fingerprint();SaveSettings();RefreshLive();StatusText.Text="Applied and verified. Restart Elite through your normal launch route.";
     });
     void Restore_Click(object sender,RoutedEventArgs e)=>Guard(()=>{NoRecording();if(!Review("Restore previous graphics","Restore the exact saved files from the last apply. External edits to managed files will pause restoration rather than be overwritten.","Restore saved files"))return;if(apply.List().Any(x=>x.State=="Prepared"))apply.RecoverPending(settings.Paths.Graphics);else apply.RestorePrevious(settings.Paths.Graphics,FileSet.Read(settings.Paths.Graphics).Fingerprint());settings.LastAppliedFingerprint=FileSet.Read(settings.Paths.Graphics).Fingerprint();SaveSettings();RefreshLive();StatusText.Text="Previous graphics restored and verified.";});
@@ -207,13 +202,13 @@ public partial class MainWindow : Window
         var rows=PresetComparison.Build(sources,raw,OnlyDifferences.IsChecked==true);
         var label=new FrameworkElementFactory(typeof(StackPanel));
         var title=new FrameworkElementFactory(typeof(TextBlock));title.SetBinding(TextBlock.TextProperty,new System.Windows.Data.Binding("Setting"));title.SetValue(TextBlock.TextWrappingProperty,TextWrapping.Wrap);label.AppendChild(title);
-        var origin=new FrameworkElementFactory(typeof(TextBlock));origin.SetBinding(TextBlock.TextProperty,new System.Windows.Data.Binding("Source"));origin.SetValue(TextBlock.ForegroundProperty,Brushes.LightSlateGray);origin.SetValue(TextBlock.FontSizeProperty,11d);origin.SetValue(TextBlock.TextWrappingProperty,TextWrapping.Wrap);label.AppendChild(origin);label.SetValue(FrameworkElement.MarginProperty,new Thickness(8));
+        var origin=new FrameworkElementFactory(typeof(TextBlock));origin.SetBinding(TextBlock.TextProperty,new System.Windows.Data.Binding("Source"));origin.SetValue(TextBlock.ForegroundProperty,new SolidColorBrush(Color.FromRgb(184,170,152)));origin.SetValue(TextBlock.FontSizeProperty,11d);origin.SetValue(TextBlock.TextWrappingProperty,TextWrapping.Wrap);label.AppendChild(origin);label.SetValue(FrameworkElement.MarginProperty,new Thickness(8));
         DiffGrid.Columns.Add(new DataGridTemplateColumn{Header="Setting / source",Width=raw?390:255,CellTemplate=new DataTemplate{VisualTree=label}});
         for(int i=0;i<chosen.Count;i++)
         {
             var value=new FrameworkElementFactory(typeof(TextBlock));value.SetBinding(TextBlock.TextProperty,new System.Windows.Data.Binding($"Cells[{i}].Value"));
             var style=new Style(typeof(TextBlock));style.Setters.Add(new Setter(TextBlock.TextWrappingProperty,TextWrapping.Wrap));style.Setters.Add(new Setter(FrameworkElement.MarginProperty,new Thickness(10)));
-            var changed=new DataTrigger{Binding=new System.Windows.Data.Binding($"Cells[{i}].Different"),Value=true};changed.Setters.Add(new Setter(TextBlock.ForegroundProperty,new SolidColorBrush(Color.FromRgb(255,173,77))));changed.Setters.Add(new Setter(TextBlock.FontWeightProperty,FontWeights.SemiBold));style.Triggers.Add(changed);value.SetValue(FrameworkElement.StyleProperty,style);
+            var changed=new DataTrigger{Binding=new System.Windows.Data.Binding($"Cells[{i}].Different"),Value=true};changed.Setters.Add(new Setter(TextBlock.ForegroundProperty,new SolidColorBrush(Color.FromRgb(255,150,0))));changed.Setters.Add(new Setter(TextBlock.FontWeightProperty,FontWeights.SemiBold));style.Triggers.Add(changed);value.SetValue(FrameworkElement.StyleProperty,style);
             DiffGrid.Columns.Add(new DataGridTemplateColumn{Header=new TextBlock{Text=chosen[i].Name+"\n"+chosen[i].Mode+$" · r{chosen[i].Number:000} · "+chosen[i].Id[..6],TextWrapping=TextWrapping.Wrap,MaxWidth=190},Width=chosen.Count<=4?new DataGridLength(1,DataGridLengthUnitType.Star):new DataGridLength(205),MinWidth=160,CellTemplate=new DataTemplate{VisualTree=value}});
         }
         DiffGrid.ItemsSource=rows;
@@ -274,8 +269,8 @@ public partial class MainWindow : Window
     {
         MemoryChart.Children.Clear();var valid=chartSamples.Where(x=>x.MemoryMiB.HasValue).ToList();double width=MemoryChart.ActualWidth,height=MemoryChart.ActualHeight;if(width<20||height<20||valid.Count==0)return;
         var max=Math.Max(1024,valid.Max(x=>x.MemoryMiB!.Value)*1.1);var seconds=Math.Max(1,valid.Max(x=>x.Seconds));
-        for(int i=1;i<4;i++){var y=height*i/4;MemoryChart.Children.Add(new Line{X1=0,X2=width,Y1=y,Y2=y,Stroke=new SolidColorBrush(Color.FromRgb(42,58,76)),StrokeThickness=1});}
-        var line=new Polyline{Stroke=new SolidColorBrush(Color.FromRgb(255,173,77)),StrokeThickness=2};foreach(var sample in valid)line.Points.Add(new Point(sample.Seconds/seconds*width,height-10-sample.MemoryMiB!.Value/max*(height-20)));MemoryChart.Children.Add(line);
+        for(int i=1;i<4;i++){var y=height*i/4;MemoryChart.Children.Add(new Line{X1=0,X2=width,Y1=y,Y2=y,Stroke=new SolidColorBrush(Color.FromRgb(65,44,24)),StrokeThickness=1});}
+        var line=new Polyline{Stroke=new SolidColorBrush(Color.FromRgb(255,150,0)),StrokeThickness=2};foreach(var sample in valid)line.Points.Add(new Point(sample.Seconds/seconds*width,height-10-sample.MemoryMiB!.Value/max*(height-20)));MemoryChart.Children.Add(line);
     }
     void Chart_SizeChanged(object sender,SizeChangedEventArgs e)=>DrawChart();
     void UpdateRunDelta()

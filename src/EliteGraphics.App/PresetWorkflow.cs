@@ -12,7 +12,7 @@ public partial class MainWindow
     IEnumerable<TextBox> EditorTextBoxes()=>new[]{HmdBox,SsBox,LodBox,WorkBox,ShadowBox,SpotBox,WidthBox,HeightBox,FpsBox,NotesBox};
     IEnumerable<ComboBox> EditorCombos()=>new[]{ModeBox,EnvironmentBox,TerrainBox,AoBox,VolumetricBox,PlanetBox,GalaxyBox};
     string EditorKey()=>System.Text.Json.JsonSerializer.Serialize(new { Text=EditorTextBoxes().Select(x=>x.Text).ToArray(), Choices=EditorCombos().Select(x=>x.SelectedIndex).ToArray(), Vsync=VsyncBox.IsChecked, Limit=LimitBox.IsChecked });
-    bool IsDirty=>selected!=null&&(EditorKey()!=editorKey||(draftFiles!=null&&draftFiles.Fingerprint()!=selectedFiles!.Fingerprint()));
+    bool IsDirty=>selected!=null&&(InlinePending||EditorKey()!=editorKey||(draftFiles!=null&&draftFiles.Fingerprint()!=selectedFiles!.Fingerprint()));
     void WireEditor()
     {
         foreach(var box in EditorTextBoxes())box.TextChanged+=(_,_)=>RefreshDirty();
@@ -22,14 +22,16 @@ public partial class MainWindow
     void RefreshDirty()
     {
         if(loading||selected==null)return;
+        SettingsSearch.IsEnabled=CategoryBox.IsEnabled=InspectOlder.IsEnabled=InspectDefaults.IsEnabled=!InlinePending;
         UpdateApplyHeader();var dirty=IsDirty;string? error=null;
         try{if(!selected.Historical)_=Edited();}catch(Exception ex){error=ex.Message;}
         var latest=!currentWorkspace&&store.Heads().Any(p=>p.Id==selected.Id);
         SaveCurrentButton.Visibility=currentWorkspace?Visibility.Visible:Visibility.Collapsed;UpdatePresetButton.Visibility=ForkPresetButton.Visibility=currentWorkspace?Visibility.Collapsed:Visibility.Visible;DeletePresetButton.IsEnabled=!currentWorkspace;
         UpdatePresetButton.IsEnabled=dirty&&!selected.Protected&&!selected.Historical&&latest&&error==null;
-        ForkPresetButton.IsEnabled=error==null;DiscardButton.IsEnabled=dirty;
+        ForkPresetButton.IsEnabled=error==null;SaveCurrentButton.IsEnabled=error==null;DiscardButton.IsEnabled=dirty;
+        UpdatePresetButton.Visibility=!currentWorkspace&&dirty?Visibility.Visible:Visibility.Collapsed;DiscardButton.Visibility=dirty?Visibility.Visible:Visibility.Collapsed;
         ProfileTitle.Text=selected.Name+(dirty?" *":"");
-        DirtyStatus.Text=error??(currentWorkspace?(dirty?"Unsaved changes — save as a preset to keep your edits.":"Current state loaded · Save as preset when ready."):dirty?(selected.Protected?"Protected baseline — fork to keep your changes.":!latest?"Earlier revision — fork to keep your changes.":"Unsaved changes — update this preset or fork a new one."):"Saved preset · changes stay local until you apply them.");
+        DirtyStatus.Text=error??(currentWorkspace?(dirty?"Unsaved changes — save as a preset to keep your edits.":""):dirty?(selected.Protected?"Protected baseline — fork to keep your changes.":!latest?"Earlier revision — fork to keep your changes.":"Unsaved changes — update this preset or fork a new one."):"");
         HmdCard.Text=Short(HmdBox.Text)+"×";SsCard.Text=Short(SsBox.Text)+"×";
         PlanetCard.Text=PlanetBox.SelectedItem?.ToString()??"Unknown";GalaxyCard.Text=GalaxyBox.SelectedItem?.ToString()??"Unknown";
     }
@@ -37,8 +39,8 @@ public partial class MainWindow
     void FinishSave(ProfileRevision profile){currentWorkspace=false;draftFiles=null;editorKey=EditorKey();filter="ALL";RefreshLibrary(profile.Id);MainTabs.SelectedItem=ConfigureTab;}
     void UpdatePreset_Click(object sender,RoutedEventArgs e)=>Guard(()=>{NoRecording();NeedSavedPreset();if(!IsDirty)return;FinishSave(store.Update(selected!.Id,(string)ModeBox.SelectedItem,Edited(),selectedDefinitions,selected.GameBuild,NotesBox.Text));});
     void ForkPreset_Click(object sender,RoutedEventArgs e)=>Guard(()=>{NoRecording();NeedSelection();var name=Prompt("Fork this preset","New preset name",selected!.Name+" Copy");if(name==null)return;FinishSave(store.Fork(name,(string)ModeBox.SelectedItem,selected.Historical?selectedFiles!:Edited(),selectedDefinitions,selected.GameBuild,NotesBox.Text,selected.Id,selected.Historical));});
-    void DiscardPreset_Click(object sender,RoutedEventArgs e)=>Guard(()=>{NeedSelection();if(currentWorkspace){draftFiles=null;LoadDraftControls(selectedFiles!);NotesBox.Text="";editorKey=EditorKey();RefreshDirty();UpdateInventory();}else LoadProfile(selected!);});
-    void HiRes_Click(object sender,RoutedEventArgs e){PlanetBox.SelectedItem=4096;GalaxyBox.SelectedItem=4096;}
+    void DiscardPreset_Click(object sender,RoutedEventArgs e)=>Guard(()=>{NeedSelection();terminalRows=[];TerminalNotes.Text="";if(currentWorkspace){draftFiles=null;LoadDraftControls(selectedFiles!);NotesBox.Text="";editorKey=EditorKey();RefreshDirty();UpdateInventory();}else LoadProfile(selected!);});
+    void HiRes_Click(object sender,RoutedEventArgs e)=>Guard(()=>{NoRecording();NeedSelection();var files=Edited();GraphicsModel.SetTexture(files,selectedDefinitions,"Planets",4096);GraphicsModel.SetTexture(files,selectedDefinitions,"GalaxyBackground",4096);AcceptDraft(files);});
     void History_Click(object sender,RoutedEventArgs e)=>Guard(()=>
     {
         NeedSavedPreset();var window=Dialog("Preset history",720,460);var panel=new DockPanel{Margin=new Thickness(24)};window.Content=panel;
@@ -56,7 +58,7 @@ public partial class MainWindow
         ModeBox.SelectedItem=GraphicsModel.General(files,"StereoscopicMode")=="0"?"FLAT":"VR";
         WidthBox.Text=GraphicsModel.Display(files,"ScreenWidth");HeightBox.Text=GraphicsModel.Display(files,"ScreenHeight");FpsBox.Text=GraphicsModel.Display(files,"MaxFramesPerSecond");VsyncBox.IsChecked=GraphicsModel.Display(files,"VSync")=="true";LimitBox.IsChecked=GraphicsModel.Display(files,"LimitFrameRate")=="true";
         PlanetBox.SelectedItem=ParseInt(GraphicsModel.Texture(files,selectedDefinitions,"Planets").Value);GalaxyBox.SelectedItem=ParseInt(GraphicsModel.Texture(files,selectedDefinitions,"GalaxyBackground").Value);
-        selectedFiles=original;draftFiles=draft;loading=false;
+        selectedFiles=original;draftFiles=draft;editorKey=EditorKey();loading=false;
     }
     void LoadCurrent_Click(object sender,RoutedEventArgs e)=>Guard(LoadCurrentState);
     void NewPreset_Click(object sender,RoutedEventArgs e)=>CreatePreset(false);

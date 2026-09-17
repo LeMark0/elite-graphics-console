@@ -1,4 +1,4 @@
-param([switch]$Publish, [string]$DotnetPath = 'dotnet')
+param([switch]$Publish, [switch]$UiTests, [string]$DotnetPath = 'dotnet')
 $ErrorActionPreference = 'Stop'
 Push-Location $PSScriptRoot
 try {
@@ -6,6 +6,12 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Core tests failed.' }
     & $DotnetPath build src/EliteGraphics.App/EliteGraphics.App.csproj -c Release
     if ($LASTEXITCODE -ne 0) { throw 'App build failed.' }
+    if ($UiTests) {
+        & $DotnetPath publish tests/EliteGraphics.UiTests/EliteGraphics.UiTests.csproj -c Release -r win-x64 --self-contained true -o artifacts/ui-tests
+        if ($LASTEXITCODE -ne 0) { throw 'UI test build failed.' }
+        & ./artifacts/ui-tests/EliteGraphics.UiTests.exe
+        if ($LASTEXITCODE -ne 0) { throw 'UI workflow tests failed.' }
+    }
     if ($Publish) {
         $version = ([xml](Get-Content Directory.Build.props -Raw)).Project.PropertyGroup.Version
         $artifactRoot = Join-Path $PSScriptRoot 'artifacts'
