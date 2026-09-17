@@ -97,6 +97,6 @@
     </TabControl>
    </Grid>
   </Grid>
-  <Border Grid.Row="2" Background="#17110B" Padding="20,7"><Grid><TextBlock x:Name="StatusText" Text="LOCAL LIBRARY  /  SETTINGS UNCHANGED" FontSize="11" Foreground="#B8AA98"/><TextBlock Text="ELITE GRAPHICS CONSOLE  /  1.6.0" FontSize="11" HorizontalAlignment="Right" Foreground="#B8AA98"/></Grid></Border>
+  <Border Grid.Row="2" Background="#17110B" Padding="20,7"><Grid><TextBlock x:Name="StatusText" Text="LOCAL LIBRARY  /  SETTINGS UNCHANGED" FontSize="11" Foreground="#B8AA98"/><TextBlock Text="ELITE GRAPHICS CONSOLE  /  1.6.1" FontSize="11" HorizontalAlignment="Right" Foreground="#B8AA98"/></Grid></Border>
  </Grid>
 </Window>

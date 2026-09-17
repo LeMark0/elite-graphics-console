@@ -3,6 +3,8 @@ using System.Reflection;
 using System.Text;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
+using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
@@ -60,6 +62,14 @@ internal static class UiTests
             hmd.Input=hmd.Entry.Value;Call("RefreshDirty");Assert(Field<Button>("SaveCurrentButton").IsEnabled,"Cancelling current edit restores save");
             Assert(FileSet.Read(graphics).Fingerprint()==files.Fingerprint(),"UI editing never writes game files");
             Assert(new TerminalChoice("1","FXAA").ToString()=="FXAA","Selector displays friendly label");
+            var scroll=new ScrollViewer{Width=400,Height=180,HorizontalScrollBarVisibility=ScrollBarVisibility.Auto,VerticalScrollBarVisibility=ScrollBarVisibility.Auto,Content=new Border{Width=1200,Height=900,Background=System.Windows.Media.Brushes.Black}};
+            var scrollWindow=new Window{Width=460,Height=260,Content=scroll};scrollWindow.Show();Pump();
+            var horizontal=(ScrollBar)scroll.Template.FindName("PART_HorizontalScrollBar",scroll);var vertical=(ScrollBar)scroll.Template.FindName("PART_VerticalScrollBar",scroll);
+            Assert(horizontal.IsVisible&&vertical.IsVisible,"Both terminal scrollbars appear on overflowing content");
+            var right=(RepeatButton)horizontal.Template.FindName("Increase",horizontal);((RoutedCommand)right.Command).Execute(null,right);Pump();
+            var down=(RepeatButton)vertical.Template.FindName("Increase",vertical);((RoutedCommand)down.Command).Execute(null,down);Pump();
+            Assert(scroll.HorizontalOffset>0&&scroll.VerticalOffset>0,"Triangle controls scroll on their respective axes");
+            Capture(scrollWindow,Path.Combine(root,"scrollbars.png"),460,260);scrollWindow.Close();
             Call("LoadProfile",original,null,null); // Leave a clean workspace for Close.
         }
         catch(Exception ex){failures++;Console.WriteLine("FAIL "+(ex.InnerException??ex));}
