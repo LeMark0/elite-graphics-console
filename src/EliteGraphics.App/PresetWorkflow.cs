@@ -35,7 +35,7 @@ public partial class MainWindow
         HmdCard.Text=Short(HmdBox.Text)+"×";SsCard.Text=Short(SsBox.Text)+"×";
         PlanetCard.Text=PlanetBox.SelectedItem?.ToString()??"Unknown";GalaxyCard.Text=GalaxyBox.SelectedItem?.ToString()??"Unknown";
     }
-    bool ConfirmLeave()=>!IsDirty||MessageBox.Show(this,"Discard unsaved changes to "+selected!.Name+"?\n\n"+(currentWorkspace?"Save as preset first to keep them.":"Update or fork the preset first to keep them."),"Unsaved preset",MessageBoxButton.YesNo,MessageBoxImage.Question,MessageBoxResult.No)==MessageBoxResult.Yes;
+    bool ConfirmLeave()=>!IsDirty||CreateUnsavedDialog().ShowDialog()==true;
     void FinishSave(ProfileRevision profile){currentWorkspace=false;draftFiles=null;editorKey=EditorKey();filter="ALL";RefreshLibrary(profile.Id);MainTabs.SelectedItem=ConfigureTab;}
     void UpdatePreset_Click(object sender,RoutedEventArgs e)=>Guard(()=>{NoRecording();NeedSavedPreset();if(!IsDirty)return;FinishSave(store.Update(selected!.Id,(string)ModeBox.SelectedItem,Edited(),selectedDefinitions,selected.GameBuild,NotesBox.Text));});
     void ForkPreset_Click(object sender,RoutedEventArgs e)=>Guard(()=>{NoRecording();NeedSelection();var name=Prompt("Fork this preset","New preset name",selected!.Name+" Copy");if(name==null)return;FinishSave(store.Fork(name,(string)ModeBox.SelectedItem,selected.Historical?selectedFiles!:Edited(),selectedDefinitions,selected.GameBuild,NotesBox.Text,selected.Id,selected.Historical));});

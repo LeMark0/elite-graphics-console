@@ -135,7 +135,7 @@ public partial class MainWindow : Window
     void FilterInventory(){if(!InlinePending)ShowTerminalRows();}
     void SettingsSearch_Changed(object sender,TextChangedEventArgs e)=>FilterInventory();
     void InventoryOptions_Changed(object sender,RoutedEventArgs e)=>Guard(UpdateInventory);
-    void Profile_Selected(object sender,SelectionChangedEventArgs e){if(loading||ProfilesList.SelectedItem is not ProfileRevision p)return;Guard(()=>{if(!ConfirmLeave()){loading=true;ProfilesList.SelectedItem=currentWorkspace?null:selected;loading=false;return;}LoadProfile(p);MainTabs.SelectedItem=ConfigureTab;});}
+    void Profile_Selected(object sender,SelectionChangedEventArgs e){if(loading||ProfilesList.SelectedItem is not ProfileRevision p)return;Guard(()=>{if(!ConfirmLeave()){loading=true;ProfilesList.SelectedItem=currentWorkspace?null:selected;loading=false;return;}loading=true;ProfilesList.SelectedItem=((IEnumerable<ProfileRevision>)ProfilesList.ItemsSource).FirstOrDefault(item=>item.Id==p.Id);loading=false;LoadProfile(p);MainTabs.SelectedItem=ConfigureTab;});}
     void LoadProfile(ProfileRevision profile,FileSet? current=null,byte[]? definitions=null)
     {
         MainTabs.IsEnabled=true;loading=true;terminalRows=[];TerminalNotes.Text="";draftFiles=null;currentWorkspace=current!=null;selected=profile;selectedFiles=current??store.Files(profile.Id);selectedDefinitions=definitions??store.Definitions(profile.Id);

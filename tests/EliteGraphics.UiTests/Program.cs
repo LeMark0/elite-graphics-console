@@ -53,6 +53,9 @@ internal static class UiTests
             Assert(Row("HMD image quality").Entry.Value=="1.1"&&Row("Anti-aliasing").Entry.Value=="0","Saved revision reloads edited values");
             Capture(window,Path.Combine(root,"settings.png"),1440,940);
             Capture(window,Path.Combine(root,"settings-small.png"),1120,760);
+            var more=Visuals<Menu>(window).Single().Items.OfType<MenuItem>().Single();more.IsSubmenuOpen=true;Pump();
+            var popup=(Popup)more.Template.FindName("PART_Popup",more);Assert(popup.IsOpen&&more.Items.OfType<MenuItem>().Count()==5,"Terminal menu opens with all maintenance actions");
+            CaptureElement((FrameworkElement)popup.Child,Path.Combine(root,"more-menu.png"));more.IsSubmenuOpen=false;Pump();
             var settingsGrid=Field<DataGrid>("SettingsGrid");Assert(settingsGrid.Columns.Sum(c=>c.ActualWidth)<=settingsGrid.ActualWidth,"Both settings columns fit minimum window width");
             var tabs=Field<TabControl>("MainTabs");tabs.SelectedIndex=2;Pump();Capture(window,Path.Combine(root,"compare.png"),1440,940);
             var review=(Window)Call("CreateApplyReview",GraphicsModel.Diff(files,draft))!;review.Show();Pump();Capture(review,Path.Combine(root,"apply-review.png"),1040,650);review.Close();
@@ -62,6 +65,21 @@ internal static class UiTests
             hmd.Input=hmd.Entry.Value;Call("RefreshDirty");Assert(Field<Button>("SaveCurrentButton").IsEnabled,"Cancelling current edit restores save");
             Assert(FileSet.Read(graphics).Fingerprint()==files.Fingerprint(),"UI editing never writes game files");
             Assert(new TerminalChoice("1","FXAA").ToString()=="FXAA","Selector displays friendly label");
+            hmd=Row("HMD image quality");hmd.Input="1.2";Commit(hmd);
+            var unsaved=(Window)Call("CreateUnsavedDialog")!;
+            var unsavedPanel=(StackPanel)unsaved.Content;var unsavedButtons=((WrapPanel)unsavedPanel.Children[^1]).Children.OfType<Button>().ToArray();
+            Assert(unsavedButtons.Select(b=>b.Content.ToString()).SequenceEqual(new[]{"Keep editing","Discard changes and continue","Save as preset and continue"}),"Current workspace offers explicit leave actions");
+            unsaved.Show();Pump();Capture(unsaved,Path.Combine(root,"unsaved-changes.png"),780,400);unsaved.Close();
+            Assert(Row("HMD image quality").Entry.Value=="1.2"&&store.Heads().Count==1,"Closing unsaved dialog preserves the draft");
+            unsaved=(Window)Call("CreateUnsavedDialog")!;unsavedPanel=(StackPanel)unsaved.Content;
+            unsavedPanel.Children.OfType<TextBox>().Single().Text="Saved before leaving";
+            var saveAction=((WrapPanel)unsavedPanel.Children[^1]).Children.OfType<Button>().Single(b=>b.Name=="SaveAndContinue");
+            Dispatcher.CurrentDispatcher.BeginInvoke(new Action(()=>saveAction.RaiseEvent(new RoutedEventArgs(Button.ClickEvent))));
+            Assert(unsaved.ShowDialog()==true&&store.Heads().Count==2,"Save and continue persists a named current-state preset");
+            Assert(GraphicsModel.Quality(store.Files(store.Heads().Single(p=>p.Name=="Saved before leaving").Id),"HMDRenderTargetMultiplier")=="1.2","Saved leave action retains edited values");
+            hmd=Row("HMD image quality");hmd.Input="invalid";Commit(hmd);unsaved=(Window)Call("CreateUnsavedDialog")!;
+            Assert(!((WrapPanel)((StackPanel)unsaved.Content).Children[^1]).Children.OfType<Button>().Single(b=>b.Name=="SaveAndContinue").IsEnabled,"Unsaved dialog disables saving invalid input");
+            hmd.Input=hmd.Entry.Value;Call("RefreshDirty");
             var scroll=new ScrollViewer{Width=400,Height=180,HorizontalScrollBarVisibility=ScrollBarVisibility.Auto,VerticalScrollBarVisibility=ScrollBarVisibility.Auto,Content=new Border{Width=1200,Height=900,Background=System.Windows.Media.Brushes.Black}};
             var scrollWindow=new Window{Width=460,Height=260,Content=scroll};scrollWindow.Show();Pump();
             var horizontal=(ScrollBar)scroll.Template.FindName("PART_HorizontalScrollBar",scroll);var vertical=(ScrollBar)scroll.Template.FindName("PART_VerticalScrollBar",scroll);
@@ -85,5 +103,13 @@ internal static class UiTests
         window.Width=width;window.Height=height;window.UpdateLayout();Pump();
         var surface=window;var bitmap=new RenderTargetBitmap((int)surface.ActualWidth,(int)surface.ActualHeight,96,96,PixelFormats.Pbgra32);bitmap.Render(surface);
         var encoder=new PngBitmapEncoder();encoder.Frames.Add(BitmapFrame.Create(bitmap));using var stream=File.Create(path);encoder.Save(stream);
+    }
+    static IEnumerable<T> Visuals<T>(DependencyObject root) where T:DependencyObject
+    {
+        for(var i=0;i<VisualTreeHelper.GetChildrenCount(root);i++){var child=VisualTreeHelper.GetChild(root,i);if(child is T found)yield return found;foreach(var nested in Visuals<T>(child))yield return nested;}
+    }
+    static void CaptureElement(FrameworkElement element,string path)
+    {
+        var bitmap=new RenderTargetBitmap((int)Math.Ceiling(element.ActualWidth),(int)Math.Ceiling(element.ActualHeight),96,96,PixelFormats.Pbgra32);bitmap.Render(element);var encoder=new PngBitmapEncoder();encoder.Frames.Add(BitmapFrame.Create(bitmap));using var stream=File.Create(path);encoder.Save(stream);
     }
 }
