@@ -7,15 +7,17 @@ public partial class MainWindow
 {
     bool CanUpdateBeforeLeaving()=>!currentWorkspace&&selected is {Protected:false,Historical:false}&&store.Heads().Any(p=>p.Id==selected.Id);
 
-    void SaveBeforeLeaving(string name)
+    bool SaveBeforeLeaving(string name)
     {
         NoRecording();NeedSelection();
         var files=Edited();
         if(string.IsNullOrWhiteSpace(name))throw new ArgumentException("Enter a name for the new preset.");
+        if(!ReviewSave(selectedFiles!,files,name.Trim(),(string)ModeBox.SelectedItem,NotesBox.Text,currentWorkspace?"CAPTURED GAME":"SAVED REVISION",CanUpdateBeforeLeaving()))return false;
         var saved=CanUpdateBeforeLeaving()
             ?store.Update(selected!.Id,(string)ModeBox.SelectedItem,files,selectedDefinitions,selected.GameBuild,NotesBox.Text)
             :store.Fork(name.Trim(),(string)ModeBox.SelectedItem,files,selectedDefinitions,selected!.GameBuild,NotesBox.Text,currentWorkspace?null:selected.Id,selected.Historical);
         FinishSave(saved);
+        return true;
     }
 
     Window CreateUnsavedDialog()
@@ -34,7 +36,7 @@ public partial class MainWindow
         var discard=new Button{Name="DiscardAndContinue",Content="Discard changes and continue"};discard.Click+=(_,_)=>window.DialogResult=true;actions.Children.Add(discard);
         var save=new Button{Name="SaveAndContinue",Content=update?"Update preset and continue":currentWorkspace?"Save as preset and continue":"Fork preset and continue",Style=(Style)FindResource("Primary")};actions.Children.Add(save);
         try{NoRecording();_=Edited();}catch(Exception ex){save.IsEnabled=false;error.Text="To save, choose Keep editing and resolve this first: "+ex.Message;}
-        save.Click+=(_,_)=>{try{SaveBeforeLeaving(update?selected!.Name:name.Text);window.DialogResult=true;}catch(Exception ex){error.Text="Could not save: "+ex.Message;}};
+        save.Click+=(_,_)=>{try{if(SaveBeforeLeaving(update?selected!.Name:name.Text))window.DialogResult=true;}catch(Exception ex){error.Text="Could not save: "+ex.Message;}};
         window.ContentRendered+=(_,_)=>keep.Focus();
         return window;
     }

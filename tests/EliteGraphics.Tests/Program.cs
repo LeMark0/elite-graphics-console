@@ -124,5 +124,10 @@ Test("Star count validates unresolved tiers and numeric input without partial ch
     foreach(var invalid in new[]{"-1","1.5","180k","2147483648","1e5"})Throws(()=>SettingEditor.Change(files,row,invalid));
     Assert(GraphicsModel.StarCount(files,StarDefinitions()).Value=="60000");
 });
+Test("Change review expands new and removed XML files into exact values",()=>{
+    var before=Baseline();var after=before.Clone();after["DisplaySettings.xml"]=Encoding.UTF8.GetBytes("<DisplayConfig><ScreenWidth>1920</ScreenWidth><ScreenHeight>1080</ScreenHeight></DisplayConfig>");
+    var rows=ChangeReview.Between(before,after);Assert(rows.Any(r=>r.Path.EndsWith("ScreenWidth[1]")&&r.Before=="— absent"&&r.After=="1920"));
+    Assert(ChangeReview.Between(after,before).Any(r=>r.Path.EndsWith("ScreenWidth[1]")&&r.Before=="1920"&&r.After=="— absent"));Assert(ChangeReview.Between(before,before).Count==0);
+});
 int failures=0;foreach(var (name,action) in tests){try{action();Console.WriteLine("PASS "+name);}catch(Exception e){failures++;Console.WriteLine("FAIL "+name+" — "+e.Message);}}
 Console.WriteLine($"{tests.Count-failures}/{tests.Count} tests passed. Isolated fixtures: {root}");return failures==0?0:1;

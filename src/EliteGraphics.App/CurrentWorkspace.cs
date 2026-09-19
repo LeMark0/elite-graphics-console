@@ -23,7 +23,8 @@ public partial class MainWindow
     {
         NoRecording();NeedSelection();if(!currentWorkspace)return;
         var name=Prompt("Save as preset","Preset name","Current game settings");if(name==null)return;
-        FinishSave(store.Fork(name,(string)ModeBox.SelectedItem,Edited(),selectedDefinitions,selected!.GameBuild,NotesBox.Text));
+        var files=Edited();if(!ReviewSave(selectedFiles!,files,name,(string)ModeBox.SelectedItem,NotesBox.Text,"CAPTURED GAME"))return;
+        FinishSave(store.Fork(name,(string)ModeBox.SelectedItem,files,selectedDefinitions,selected!.GameBuild,NotesBox.Text));
     });
     void DeletePreset_Click(object sender,RoutedEventArgs e)=>Guard(()=>
     {

@@ -154,10 +154,6 @@ public partial class MainWindow
     void TerminalNotes_Changed(object sender,TextChangedEventArgs e){if(NotesBox!=null&&!loading)NotesBox.Text=TerminalNotes.Text;}
     void SettingsGrid_SizeChanged(object sender,SizeChangedEventArgs e)
     {
-        if(SettingsGrid.Columns.Count<3)return;
-        var available=Math.Max(0,e.NewSize.Width-48-260);
-        var nameWidth=Math.Clamp(available*0.4,150,250);
-        SettingsGrid.Columns[0].Width=new DataGridLength(nameWidth);
-        SettingsGrid.Columns[2].Width=new DataGridLength(Math.Max(180,available-nameWidth));
+        if(SettingsGrid.Columns.Count>0)SettingsGrid.Columns[0].Width=new DataGridLength(Math.Max(150,e.NewSize.Width-308));
     }
 }

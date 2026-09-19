@@ -37,8 +37,8 @@ public partial class MainWindow
     }
     bool ConfirmLeave()=>!IsDirty||CreateUnsavedDialog().ShowDialog()==true;
     void FinishSave(ProfileRevision profile){currentWorkspace=false;draftFiles=null;editorKey=EditorKey();filter="ALL";RefreshLibrary(profile.Id);MainTabs.SelectedItem=ConfigureTab;}
-    void UpdatePreset_Click(object sender,RoutedEventArgs e)=>Guard(()=>{NoRecording();NeedSavedPreset();if(!IsDirty)return;FinishSave(store.Update(selected!.Id,(string)ModeBox.SelectedItem,Edited(),selectedDefinitions,selected.GameBuild,NotesBox.Text));});
-    void ForkPreset_Click(object sender,RoutedEventArgs e)=>Guard(()=>{NoRecording();NeedSelection();var name=Prompt("Fork this preset","New preset name",selected!.Name+" Copy");if(name==null)return;FinishSave(store.Fork(name,(string)ModeBox.SelectedItem,selected.Historical?selectedFiles!:Edited(),selectedDefinitions,selected.GameBuild,NotesBox.Text,selected.Id,selected.Historical));});
+    void UpdatePreset_Click(object sender,RoutedEventArgs e)=>Guard(()=>{NoRecording();NeedSavedPreset();if(!IsDirty)return;var files=Edited();if(!ReviewSave(selectedFiles!,files,selected!.Name,(string)ModeBox.SelectedItem,NotesBox.Text,"SAVED REVISION",true))return;FinishSave(store.Update(selected!.Id,(string)ModeBox.SelectedItem,files,selectedDefinitions,selected.GameBuild,NotesBox.Text));});
+    void ForkPreset_Click(object sender,RoutedEventArgs e)=>Guard(()=>{NoRecording();NeedSelection();var name=Prompt("Fork this preset","New preset name",selected!.Name+" Copy");if(name==null)return;var files=selected!.Historical?selectedFiles!:Edited();if(!ReviewSave(selectedFiles!,files,name,(string)ModeBox.SelectedItem,NotesBox.Text,"SOURCE PRESET"))return;FinishSave(store.Fork(name,(string)ModeBox.SelectedItem,files,selectedDefinitions,selected.GameBuild,NotesBox.Text,selected.Id,selected.Historical));});
     void DiscardPreset_Click(object sender,RoutedEventArgs e)=>Guard(()=>{NeedSelection();terminalRows=[];TerminalNotes.Text="";if(currentWorkspace){draftFiles=null;LoadDraftControls(selectedFiles!);NotesBox.Text="";editorKey=EditorKey();RefreshDirty();UpdateInventory();}else LoadProfile(selected!);});
     void HiRes_Click(object sender,RoutedEventArgs e)=>Guard(()=>{NoRecording();NeedSelection();var files=Edited();GraphicsModel.SetTexture(files,selectedDefinitions,"Planets",4096);GraphicsModel.SetTexture(files,selectedDefinitions,"GalaxyBackground",4096);AcceptDraft(files);});
     void History_Click(object sender,RoutedEventArgs e)=>Guard(()=>
@@ -75,17 +75,19 @@ public partial class MainWindow
         var create=new Button{Content=fromGame?"Load as new preset":"Create preset",HorizontalAlignment=HorizontalAlignment.Right,Style=(Style)FindResource("Primary")};panel.Children.Add(create);
         create.Click+=(_,_)=>{try{
             if(string.IsNullOrWhiteSpace(name.Text))throw new ArgumentException("Enter a preset name.");
-            FileSet files;byte[] defs;string build;string? parent=null;bool historical=false;string mode;
-            if(source.SelectedIndex==2){var p=saved.SelectedItem as ProfileRevision??throw new InvalidOperationException("Choose a saved preset.");files=store.Files(p.Id);defs=store.Definitions(p.Id);build=p.GameBuild;parent=p.Id;historical=p.Historical;mode=p.Mode;}
+            FileSet files;FileSet baselineFiles;byte[] defs;string build;string? parent=null;bool historical=false;string mode;
+            if(source.SelectedIndex==2){var p=saved.SelectedItem as ProfileRevision??throw new InvalidOperationException("Choose a saved preset.");files=store.Files(p.Id);baselineFiles=files;defs=store.Definitions(p.Id);build=p.GameBuild;parent=p.Id;historical=p.Historical;mode=p.Mode;}
             else{
                 if(GameRunning())throw new InvalidOperationException("Close Elite normally before reading its saved settings.");
-                var current=FileSet.Read(settings.Paths.Graphics);defs=settings.Paths.ReadDefinitions();build=settings.Paths.Build();files=current;
+                var current=FileSet.Read(settings.Paths.Graphics);defs=settings.Paths.ReadDefinitions();build=settings.Paths.Build();files=current;baselineFiles=current;
                 if(source.SelectedIndex==1){var template=defaults.SelectedItem as DefaultChoice??throw new InvalidOperationException("No installed default presets found.");files=PresetDefaults.Create(current,File.ReadAllBytes(template.Path));}
                 mode=GraphicsModel.General(files,"StereoscopicMode")=="0"?"FLAT":"VR";
                 if(GameRunning()||current.Fingerprint()!=FileSet.Read(settings.Paths.Graphics).Fingerprint()||!defs.SequenceEqual(settings.Paths.ReadDefinitions())||build!=settings.Paths.Build())throw new InvalidOperationException("Game settings changed during capture. Try again.");
             }
             if(!ConfirmLeave())return;
-            var result=store.Fork(name.Text.Trim(),mode,files,defs,build,"Created from "+source.SelectedItem+(source.SelectedIndex==1?": "+((DefaultChoice)defaults.SelectedItem).Name+"; display/headset, HUD and unspecified fields inherited.":"."),parent,historical);
+            var notes="Created from "+source.SelectedItem+(source.SelectedIndex==1?": "+((DefaultChoice)defaults.SelectedItem).Name+"; display/headset, HUD and unspecified fields inherited.":".");
+            if(!ReviewSave(baselineFiles,files,name.Text.Trim(),mode,notes,source.SelectedIndex==2?"SOURCE PRESET":"CAPTURED GAME",definitions:defs))return;
+            var result=store.Fork(name.Text.Trim(),mode,files,defs,build,notes,parent,historical);
             window.DialogResult=true;FinishSave(result);
         }catch(Exception ex){MessageBox.Show(window,ex.Message,"Cannot create preset");}};
         window.ShowDialog();

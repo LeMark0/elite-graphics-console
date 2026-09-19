@@ -44,6 +44,13 @@ internal static class UiTests
             T Field<T>(string name)=>(T)typeof(MainWindow).GetField(name,BindingFlags.Instance|BindingFlags.NonPublic)!.GetValue(window)!;
             TerminalSetting Row(string name)=>Field<List<TerminalSetting>>("terminalRows").Single(r=>r.Entry.Setting==name);
             bool Commit(TerminalSetting row)=>(bool)Call("CommitInline",row)!;
+            void QueueReview(bool accept)=>Dispatcher.CurrentDispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle,new Action(()=>{
+                var dialog=app.Windows.OfType<Window>().Single(w=>w.Name=="ChangeReviewWindow");
+                Assert(Visuals<DataGrid>(dialog).Single().IsReadOnly,"Change review is read-only");
+                Capture(dialog,Path.Combine(root,"change-review.png"),1040,650);
+                if(accept)Visuals<Button>(dialog).Single(b=>b.Name=="ConfirmChanges").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                else dialog.DialogResult=false;
+            }));
             var hmd=Row("HMD image quality");hmd.Input="1.1";Assert(Commit(hmd),"Inline decimal commits from integer serialization");
             Assert(GraphicsModel.Quality((FileSet)Call("Edited")!,"HMDRenderTargetMultiplier")=="1.1","Shared draft retains inline multiplier");
             Assert(Field<Button>("UpdatePresetButton").IsEnabled&&!Field<Button>("HeaderApplyButton").IsEnabled,"Dirty preset can update but cannot apply");
@@ -61,7 +68,8 @@ internal static class UiTests
             var stars=Row("Visible star count");Assert(stars.Entry.Value=="2000"&&stars.Editable,"Star count shows an editable inherited value without an override");
             stars.Input="180k";Assert(!Commit(stars)&&stars.Error.Length>0,"Invalid star count stays pending with an error");
             stars.Input="60000";Assert(Commit(stars)&&GraphicsModel.StarCount((FileSet)Call("Edited")!,defs).Value=="60000","Star count edit creates the selected tier override in the draft");
-            Call("UpdatePreset_Click",window,new RoutedEventArgs());Assert(store.Heads().Single().Number==2,"Update saves revision under original identity");
+            QueueReview(false);Call("UpdatePreset_Click",window,new RoutedEventArgs());Assert(store.List().Count==1&&Row("Visible star count").Entry.Value=="60000","Cancelling save review preserves draft and creates no revision");
+            QueueReview(true);Call("UpdatePreset_Click",window,new RoutedEventArgs());Assert(store.Heads().Single().Number==2,"Update saves revision under original identity");
             Assert(Row("Visible star count").Entry.Value=="60000","Star count survives saving and reloading the preset");
             Assert(Row("HMD image quality").Entry.Value=="1.1"&&Row("Anti-aliasing").Entry.Value=="0","Saved revision reloads edited values");
             Capture(window,Path.Combine(root,"settings.png"),1440,940);
@@ -69,7 +77,7 @@ internal static class UiTests
             var more=Visuals<Menu>(window).Single().Items.OfType<MenuItem>().Single();more.IsSubmenuOpen=true;Pump();
             var popup=(Popup)more.Template.FindName("PART_Popup",more);Assert(popup.IsOpen&&more.Items.OfType<MenuItem>().Count()==5,"Terminal menu opens with all maintenance actions");
             CaptureElement((FrameworkElement)popup.Child,Path.Combine(root,"more-menu.png"));more.IsSubmenuOpen=false;Pump();
-            var settingsGrid=Field<DataGrid>("SettingsGrid");Assert(settingsGrid.Columns.Select(c=>c.Header.ToString()).SequenceEqual(new[]{"SETTING","VALUE","DESCRIPTION"})&&settingsGrid.Columns.Sum(c=>c.ActualWidth)<=settingsGrid.ActualWidth,"Setting, value and description columns fit minimum window width");
+            var settingsGrid=Field<DataGrid>("SettingsGrid");Assert(settingsGrid.Columns.Select(c=>c.Header.ToString()).SequenceEqual(new[]{"SETTING","VALUE"})&&settingsGrid.Columns.Sum(c=>c.ActualWidth)<=settingsGrid.ActualWidth,"Setting and value columns fit minimum window width");
             var labelRow=Field<List<TerminalSetting>>("terminalRows").Single(r=>r.Entry.Path.Contains("LocalisationName"));
             Assert(!labelRow.Editable&&labelRow.ReferenceVisibility==Visibility.Visible&&labelRow.TextVisibility==Visibility.Collapsed&&labelRow.Entry.DisplayValue=="Ultra","Localisation metadata displays a readable read-only value");
             Field<TextBox>("SettingsSearch").Text="spatial upscaling";Pump();
@@ -78,7 +86,8 @@ internal static class UiTests
             Field<TextBox>("SettingsSearch").Text="";Pump();
             Field<TextBox>("SettingsSearch").Text="Visible star count";Pump();Capture(window,Path.Combine(root,"star-count.png"),1120,760);Field<TextBox>("SettingsSearch").Text="";Pump();
             var tabs=Field<TabControl>("MainTabs");tabs.SelectedIndex=2;Pump();Capture(window,Path.Combine(root,"compare.png"),1440,940);
-            var review=(Window)Call("CreateApplyReview",GraphicsModel.Diff(files,draft))!;review.Show();Pump();Capture(review,Path.Combine(root,"apply-review.png"),1040,650);review.Close();
+            var review=(Window)Call("CreateApplyReview",ChangeReview.Between(files,draft))!;review.Show();Pump();Capture(review,Path.Combine(root,"apply-review.png"),1040,650);review.Close();
+            QueueReview(false);Call("Apply_Click",window,new RoutedEventArgs());Assert(FileSet.Read(graphics).Fingerprint()==files.Fingerprint(),"Cancelling apply review leaves game files unchanged");
             Call("LoadCurrentState");Assert(Field<ListBox>("ProfilesList").SelectedItem==null&&Field<Button>("SaveCurrentButton").Visibility==Visibility.Visible,"Load current clears selection and offers save immediately");
             Assert(store.Heads().Count==1&&store.List().Count==2,"Load current creates no revision");
             hmd=Row("HMD image quality");hmd.Input="bad";Commit(hmd);Assert(!Field<Button>("SaveCurrentButton").IsEnabled,"Invalid current-state edit blocks save");
@@ -94,7 +103,7 @@ internal static class UiTests
             unsaved=(Window)Call("CreateUnsavedDialog")!;unsavedPanel=(StackPanel)unsaved.Content;
             unsavedPanel.Children.OfType<TextBox>().Single().Text="Saved before leaving";
             var saveAction=((WrapPanel)unsavedPanel.Children[^1]).Children.OfType<Button>().Single(b=>b.Name=="SaveAndContinue");
-            Dispatcher.CurrentDispatcher.BeginInvoke(new Action(()=>saveAction.RaiseEvent(new RoutedEventArgs(Button.ClickEvent))));
+            Dispatcher.CurrentDispatcher.BeginInvoke(new Action(()=>{QueueReview(true);saveAction.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));}));
             Assert(unsaved.ShowDialog()==true&&store.Heads().Count==2,"Save and continue persists a named current-state preset");
             Assert(GraphicsModel.Quality(store.Files(store.Heads().Single(p=>p.Name=="Saved before leaving").Id),"HMDRenderTargetMultiplier")=="1.2","Saved leave action retains edited values");
             hmd=Row("HMD image quality");hmd.Input="invalid";Commit(hmd);unsaved=(Window)Call("CreateUnsavedDialog")!;
