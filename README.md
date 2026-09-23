@@ -2,6 +2,8 @@
 
 A Windows desktop graphics profile manager for Elite Dangerous Odyssey, with a cockpit-inspired interface and a local performance notebook. Designed for VR through Virtual Desktop / OpenComposite / VDXR and for flat-screen play. SteamVR is not required.
 
+![Elite Graphics Console settings view with preset library, editable graphics values, and setting descriptions](docs/images/settings.png)
+
 ## Install and start
 
 Download the Windows x64 ZIP from this private repository's [releases](https://github.com/LeMark0/elite-graphics-console/releases), extract it, and run `EliteGraphicsConsole.exe`. The package includes its .NET runtime; no SDK or administrator access is required. The executable is not code-signed.
