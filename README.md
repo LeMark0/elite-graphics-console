@@ -6,7 +6,9 @@ A Windows desktop graphics profile manager for Elite Dangerous Odyssey, with a c
 
 ## Install and start
 
-Download the Windows x64 ZIP from this private repository's [releases](https://github.com/LeMark0/elite-graphics-console/releases), extract it, and run `EliteGraphicsConsole.exe`. The package includes its .NET runtime; no SDK or administrator access is required. The executable is not code-signed.
+Download the Windows x64 ZIP from this repository's [releases](https://github.com/LeMark0/elite-graphics-console/releases), extract it, and run `EliteGraphicsConsole.exe`. The package includes its .NET runtime; no SDK or administrator access is required. The executable is not code-signed.
+
+Public-readiness work ships in [small milestones](docs/PUBLIC-READINESS.md). Version 1.9.1 is a prerelease that restricts Apply/Restore to recognised graphics files. Target validation, transaction locking and release gates remain pending; this is not yet a general-user release. See [compatibility details](docs/RELEASE-1.9.1.md).
 
 To install under your user account and create a desktop shortcut, run `Install.ps1` from the extracted folder. Installation does not change Elite's graphics files.
 

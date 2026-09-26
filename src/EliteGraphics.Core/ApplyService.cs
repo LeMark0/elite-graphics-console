@@ -27,7 +27,8 @@ public sealed class ApplyService
         if(capturedDefinitions.Length==0||installedDefinitions.Length==0||FileSet.Hash(capturedDefinitions)!=FileSet.Hash(installedDefinitions))throw new InvalidOperationException("Installed graphics definitions differ or are missing. Capture/migrate a revision for the current game build.");
         if(capturedBuild=="Unknown"||installedBuild=="Unknown"||capturedBuild!=installedBuild)throw new InvalidOperationException("Game build differs or is unknown. Capture/migrate for this installation first.");
         if(GraphicsModel.ActiveFile(desired)!=GraphicsModel.ActiveFile(current))throw new InvalidOperationException("Custom schema differs. Migrate the historical profile first; newer files will not be deleted.");
-        if(current.Keys.Except(desired.Keys,StringComparer.OrdinalIgnoreCase).Any())throw new InvalidOperationException("Current graphics contains files absent from this revision. Capture/migrate a new revision, or restore the preceding transaction. Apply will not silently retain extra settings or delete them.");
+        desired=ManagedGraphicsFiles.ForApply(desired,current);
+        if(current.Keys.Where(ManagedGraphicsFiles.CanWrite).Except(desired.Keys,StringComparer.OrdinalIgnoreCase).Any())throw new InvalidOperationException("Current graphics contains managed files absent from this revision. Capture/migrate a new revision, or restore the preceding transaction. Apply will not silently retain extra settings or delete them.");
         if(List().Any(x=>x.State=="Prepared"&&SamePath(x.Target,target)))throw new InvalidOperationException("An unfinished transaction needs recovery before applying.");
         var record=new TransactionRecord{Target=Path.GetFullPath(target),Before=desired.Keys.ToDictionary(x=>x,x=>current.TryGetValue(x,out var b)?FileSet.Hash(b):null),After=desired.Hashes()};
         var folder=Folder(record.Id);Directory.CreateDirectory(Path.Combine(folder,"before"));Directory.CreateDirectory(Path.Combine(folder,"stage"));
@@ -69,7 +70,7 @@ public sealed class ApplyService
         var folder=Folder(record.Id);var original=new Dictionary<string,byte[]?>();
         foreach(var (name,hash) in record.Before)
         {
-            if(!FileSet.Allowed(name)||!record.After.ContainsKey(name))throw new InvalidDataException("Invalid rollback manifest.");
+            if(!ManagedGraphicsFiles.CanWrite(name)||!record.After.ContainsKey(name))throw new InvalidDataException("Rollback contains an unrecognised graphics file. No files were restored: "+name);
             var now=current.TryGetValue(name,out var b)?FileSet.Hash(b):null;
             if(now!=hash&&now!=record.After[name])throw new InvalidOperationException("A managed file changed outside the app. Recovery is paused to preserve it: "+name);
             var path=Path.Combine(folder,"before",name);var bytes=hash!=null?File.ReadAllBytes(path):null;

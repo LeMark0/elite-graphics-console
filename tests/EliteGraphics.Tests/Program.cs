@@ -40,7 +40,7 @@ Test("Migration preserves current-only fields",()=>{var old=Baseline("4.3");var 
 Test("PresentMon import filters process and calculates percentiles",()=>{var file=Path.Combine(NewFolder(),"frames.csv");File.WriteAllText(file,"Application,SwapChainAddress,MsBetweenPresents\nOther.exe,0,999\nEliteDangerous64.exe,1,10\nEliteDangerous64.exe,1,20\nEliteDangerous64.exe,1,60\n");var summary=PresentMonImport.Read(file,"FLAT");Assert(summary.Count==3&&summary.P99Ms==60&&summary.HitchesOver50Ms==1);Assert(Math.Abs(summary.AverageFps-1000d/30)<.001);Throws(()=>PresentMonImport.Read(file,"VR"));});
 Test("PresentMon multiple swapchains rejected",()=>{var file=Path.Combine(NewFolder(),"frames.csv");File.WriteAllText(file,"Application,SwapChainAddress,FrameTime\nEliteDangerous64.exe,1,10\nEliteDangerous64.exe,2,20\n");Throws(()=>PresentMonImport.Read(file,"FLAT"));});
 Test("Missing GPU counters remain unavailable",()=>{Assert(GpuRecorder.Number("[N/A]")==null);Assert(GpuRecorder.Number("NaN")==null);Assert(GpuRecorder.Number("4096")==4096);});
-Test("Apply blocks a mixed profile when an extra live graphics file exists",()=>{var dir=NewFolder();var b=Baseline();Write(b,dir);File.WriteAllText(Path.Combine(dir,"Extra.xml"),"<Extra>preserve</Extra>");var current=FileSet.Read(dir);var service=new ApplyService(NewFolder(),()=>false);Throws(()=>service.Apply(dir,Enhanced(b),current.Fingerprint(),definitions,definitions,"b","b"));Assert(FileSet.Read(dir).Fingerprint()==current.Fingerprint());Assert(service.List().Count==0);});
+Test("Apply blocks a mixed profile when an extra managed graphics file exists",()=>{var dir=NewFolder();var b=Baseline();Write(b,dir);File.WriteAllText(Path.Combine(dir,"DisplaySettings.xml"),"<DisplayConfig><ScreenWidth>1920</ScreenWidth></DisplayConfig>");var current=FileSet.Read(dir);var service=new ApplyService(NewFolder(),()=>false);Throws(()=>service.Apply(dir,Enhanced(b),current.Fingerprint(),definitions,definitions,"b","b"));Assert(FileSet.Read(dir).Fingerprint()==current.Fingerprint());Assert(service.List().Count==0);});
 Test("Live benchmark CSV can be read while its writer remains open",()=>{var store=new BenchmarkStore(NewFolder());var run=new BenchmarkRun();store.Save(run);using var recorder=new GpuRecorder(store,run);Assert(store.Samples(run.Id).Count==0);var path=Path.Combine(store.Folder(run.Id),"other.csv");using var writer=new StreamWriter(path){AutoFlush=true};writer.WriteLine("seconds,memory,util,temp,clock,power");writer.WriteLine("1,1024,50,40,1000,100");var second=new BenchmarkRun();store.Save(second);var secondPath=Path.Combine(store.Folder(second.Id),"gpu.csv");using var stream=new FileStream(secondPath,FileMode.Create,FileAccess.Write,FileShare.Read);using var liveWriter=new StreamWriter(stream){AutoFlush=true};liveWriter.WriteLine("seconds,memory,util,temp,clock,power");liveWriter.WriteLine("1,1024,50,40,1000,100");Assert(store.Samples(second.Id).Single().MemoryMiB==1024);});
 
 Test("Comparison detects differences unique to the third preset",()=>{var a=Baseline();var b=a.Clone();var c=Enhanced(a);var rows=PresetComparison.Build(new[]{new ComparisonSource("A",a,definitions),new ComparisonSource("B",b,definitions),new ComparisonSource("C",c,definitions)},false,true);Assert(rows.Count==2);Assert(rows.All(r=>!r.Cells[0].Different&&!r.Cells[1].Different&&r.Cells[2].Different));Assert(rows.All(r=>r.Cells[0].Value=="1024"&&r.Cells[2].Value=="4096"));});
@@ -128,6 +128,44 @@ Test("Change review expands new and removed XML files into exact values",()=>{
     var before=Baseline();var after=before.Clone();after["DisplaySettings.xml"]=Encoding.UTF8.GetBytes("<DisplayConfig><ScreenWidth>1920</ScreenWidth><ScreenHeight>1080</ScreenHeight></DisplayConfig>");
     var rows=ChangeReview.Between(before,after);Assert(rows.Any(r=>r.Path.EndsWith("ScreenWidth[1]")&&r.Before=="— absent"&&r.After=="1920"));
     Assert(ChangeReview.Between(after,before).Any(r=>r.Path.EndsWith("ScreenWidth[1]")&&r.Before=="1920"&&r.After=="— absent"));Assert(ChangeReview.Between(before,before).Count==0);
+});
+Test("Write policy accepts only exact recognised filenames",()=>{
+    foreach(var name in new[]{"Settings.xml","displaysettings.XML","GraphicsConfigurationOverride.xml","StartPreset.start","Custom.4.4.fxcfg","Custom.3.0.fxcfg"})Assert(ManagedGraphicsFiles.CanWrite(name),name);
+    foreach(var name in new[]{"Unrelated.xml","Other.fxcfg","Other.start","Custom.x.4.fxcfg","Custom.4.4.fxcfg\n","../Settings.xml","Settings.xml:stream","Custom.4.4.fxcfg.xml"})Assert(!ManagedGraphicsFiles.CanWrite(name),name);
+});
+Test("Changed unknown XML cannot be applied and creates no journal",()=>{
+    var dir=NewFolder();var b=Baseline();b["Unrelated.xml"]=Encoding.UTF8.GetBytes("<Other>original</Other>");Write(b,dir);
+    var desired=Enhanced(b);desired["Unrelated.xml"]=Encoding.UTF8.GetBytes("<Other>changed</Other>");
+    var service=new ApplyService(NewFolder(),()=>false);
+    Throws(()=>service.Apply(dir,desired,b.Fingerprint(),definitions,definitions,"b","b"));
+    Assert(FileSet.Read(dir).Fingerprint()==b.Fingerprint()&&service.List().Count==0);
+});
+Test("Unknown files cannot be introduced by a snapshot",()=>{
+    var dir=NewFolder();var b=Baseline();Write(b,dir);var desired=Enhanced(b);desired["Other.start"]=Encoding.UTF8.GetBytes("High");
+    var service=new ApplyService(NewFolder(),()=>false);Throws(()=>service.Apply(dir,desired,b.Fingerprint(),definitions,definitions,"b","b"));
+    Assert(FileSet.Read(dir).Fingerprint()==b.Fingerprint()&&service.List().Count==0);
+});
+Test("Unchanged unknown snapshots are captured but excluded from transaction writes",()=>{
+    var dir=NewFolder();var b=Baseline();b["Unrelated.xml"]=Encoding.UTF8.GetBytes("<Other>original</Other>");Write(b,dir);
+    var service=new ApplyService(NewFolder(),()=>false);service.Apply(dir,Enhanced(b),b.Fingerprint(),definitions,definitions,"b","b");
+    Assert(!service.List().Single().Before.ContainsKey("Unrelated.xml"));
+    File.WriteAllText(Path.Combine(dir,"Unrelated.xml"),"<Other>external edit</Other>");
+    service.RestorePrevious(dir,FileSet.Read(dir).Fingerprint());
+    Assert(File.ReadAllText(Path.Combine(dir,"Unrelated.xml"))=="<Other>external edit</Other>");
+    Assert(File.ReadAllBytes(Path.Combine(dir,"GraphicsConfigurationOverride.xml")).SequenceEqual(b["GraphicsConfigurationOverride.xml"]));
+});
+Test("Unknown destination files absent from snapshot survive apply",()=>{
+    var dir=NewFolder();var b=Baseline();Write(b,dir);File.WriteAllText(Path.Combine(dir,"Unrelated.xml"),"<Other/>");
+    var service=new ApplyService(NewFolder(),()=>false);service.Apply(dir,Enhanced(b),FileSet.Read(dir).Fingerprint(),definitions,definitions,"b","b");
+    Assert(File.ReadAllText(Path.Combine(dir,"Unrelated.xml"))=="<Other/>");
+});
+Test("Old rollback containing unknown files fails before restoring any file",()=>{
+    var dir=NewFolder();var library=NewFolder();var b=Baseline();Write(b,dir);
+    var service=new ApplyService(library,()=>false);service.Apply(dir,Enhanced(b),b.Fingerprint(),definitions,definitions,"b","b");
+    var record=service.List().Single();record.Before["Unrelated.xml"]=null;record.After["Unrelated.xml"]=FileSet.Hash(Encoding.UTF8.GetBytes("<Other/>"));
+    JsonIO.Save(Path.Combine(library,"transactions",record.Id,"transaction.json"),record);
+    var fingerprint=FileSet.Read(dir).Fingerprint();Throws(()=>service.RestorePrevious(dir,fingerprint));
+    Assert(FileSet.Read(dir).Fingerprint()==fingerprint&&service.List().Single().State=="Applied");
 });
 int failures=0;foreach(var (name,action) in tests){try{action();Console.WriteLine("PASS "+name);}catch(Exception e){failures++;Console.WriteLine("FAIL "+name+" — "+e.Message);}}
 Console.WriteLine($"{tests.Count-failures}/{tests.Count} tests passed. Isolated fixtures: {root}");return failures==0?0:1;
