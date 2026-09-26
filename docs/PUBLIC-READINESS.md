@@ -6,8 +6,8 @@ are resolved. Existing public visibility is retained.
 
 | Order | Milestone | Exit criteria |
 |---|---|---|
-| 1 | Managed-file write scope | Unknown snapshot files cannot be applied/restored; customisations survive |
-| 2 | Target and transaction safety | Validated targets, linked-path rejection, target-wide Apply/Restore/recovery locking, concurrency regression tests |
+| 1 | Managed-file write scope — v1.9.1 | Unknown snapshot files cannot be applied/restored; customisations survive |
+| 2 | Target and transaction safety — v1.9.2 | Validated targets, linked-path rejection, target-wide Apply/Restore/recovery locking, concurrency regression tests |
 | 3 | Repository and release gates | Security protections, history scan, Windows CI, artifact checks, support/security guidance; owner chooses license |
 | 4 | General-user setup | Explicit installation/baseline selection, optional legacy imports and enhancements, useful empty states |
 | 5 | Distribution and servicing | Supported LTS runtime, manifest-based installer, documented update and rollback process |

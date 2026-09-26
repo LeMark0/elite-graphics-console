@@ -9,8 +9,19 @@ FileSet Baseline(string version="4.4")=>new(){["Settings.xml"]=Encoding.UTF8.Get
 void Assert(bool ok,string text="Assertion failed"){if(!ok)throw new Exception(text);}
 void Throws(Action action){try{action();}catch(Exception){return;}throw new Exception("Expected failure, but action succeeded.");}
 string NewFolder(){var p=Path.Combine(root,Guid.NewGuid().ToString("N"));Directory.CreateDirectory(p);return p;}
+string NewGraphicsFolder(){var p=Path.Combine(NewFolder(),"Frontier Developments","Elite Dangerous","Options","Graphics");Directory.CreateDirectory(p);return p;}
 void Write(FileSet data,string folder){foreach(var(k,v)in data)File.WriteAllBytes(Path.Combine(folder,k),v);}
 FileSet Enhanced(FileSet source){var data=source.Clone();GraphicsModel.SetTexture(data,definitions,"Planets",4096);GraphicsModel.SetTexture(data,definitions,"GalaxyBackground",4096);return data;}
+if(args.Length==3&&args[0]=="--hold-transaction")
+{
+    var childService=new ApplyService(args[2],()=>false);
+    var childDesired=Enhanced(FileSet.Read(args[1]));GraphicsModel.Set(childDesired,"Settings.xml","GammaOffset","0.25");
+    childService.Apply(args[1],childDesired,FileSet.Read(args[1]).Fingerprint(),definitions,definitions,"b","b",n=>{
+        if(File.ReadAllBytes(Path.Combine(args[1],"Settings.xml")).SequenceEqual(childDesired["Settings.xml"]))
+        {Console.WriteLine("LOCKED");Console.Out.Flush();Thread.Sleep(Timeout.Infinite);}
+    });
+    return 0;
+}
 var tests=new List<(string Name,Action Run)>();
 void Test(string name,Action action)=>tests.Add((name,action));
 
@@ -27,20 +38,20 @@ Test("Unsafe paths and executable filenames rejected",()=>{foreach(var name in n
 Test("Immutable revisions retain byte-exact original",()=>{var s=new ProfileStore(NewFolder());var b=Baseline();var p=s.Save("Baseline","VR",b,definitions,"build",protect:true);var e=Enhanced(b);var q=s.Save("Baseline","VR",e,definitions,"build",parentId:p.Id);Assert(p.Number==1&&q.Number==2);Assert(s.Files(p.Id).Fingerprint()==b.Fingerprint());Assert(s.Get(p.Id).Protected);Assert(q.ParentId==p.Id);});
 Test("Revision tampering detected",()=>{var s=new ProfileStore(NewFolder());var p=s.Save("A","VR",Baseline(),definitions,"build");File.AppendAllText(Path.Combine(s.Profiles,p.Id,"Graphics","Settings.xml")," ");Throws(()=>s.Files(p.Id));});
 Test("Definition tampering detected",()=>{var s=new ProfileStore(NewFolder());var p=s.Save("A","VR",Baseline(),definitions,"build");File.AppendAllText(Path.Combine(s.Profiles,p.Id,"Definitions.xml")," ");Throws(()=>s.Definitions(p.Id));});
-Test("Apply and restore preserve unrelated files",()=>{var dir=NewFolder();var b=Baseline();Write(b,dir);File.WriteAllText(Path.Combine(dir,"unrelated.txt"),"untouched");var service=new ApplyService(NewFolder(),()=>false);var e=Enhanced(b);service.Apply(dir,e,b.Fingerprint(),definitions,definitions,"build","build");Assert(FileSet.Read(dir).Fingerprint()==e.Fingerprint());service.RestorePrevious(dir,e.Fingerprint());Assert(FileSet.Read(dir).Fingerprint()==b.Fingerprint());Assert(File.ReadAllText(Path.Combine(dir,"unrelated.txt"))=="untouched");});
-Test("Game running blocks apply without writing",()=>{var dir=NewFolder();var b=Baseline();Write(b,dir);var s=new ApplyService(NewFolder(),()=>true);Throws(()=>s.Apply(dir,Enhanced(b),b.Fingerprint(),definitions,definitions,"b","b"));Assert(FileSet.Read(dir).Fingerprint()==b.Fingerprint());});
-Test("Stale preview blocks overwriting external edits",()=>{var dir=NewFolder();var b=Baseline();Write(b,dir);File.AppendAllText(Path.Combine(dir,"Settings.xml")," ");var changed=FileSet.Read(dir).Fingerprint();var s=new ApplyService(NewFolder(),()=>false);Throws(()=>s.Apply(dir,Enhanced(b),b.Fingerprint(),definitions,definitions,"b","b"));Assert(FileSet.Read(dir).Fingerprint()==changed);});
-Test("Old schema cannot remove new .fxcfg",()=>{var dir=NewFolder();var b=Baseline();Write(b,dir);var s=new ApplyService(NewFolder(),()=>false);Throws(()=>s.Apply(dir,Baseline("4.3"),b.Fingerprint(),definitions,definitions,"b","b"));Assert(File.Exists(Path.Combine(dir,"Custom.4.4.fxcfg")));});
-Test("Changed game build/definitions block apply",()=>{var dir=NewFolder();var b=Baseline();Write(b,dir);var s=new ApplyService(NewFolder(),()=>false);Throws(()=>s.Apply(dir,Enhanced(b),b.Fingerprint(),definitions,definitions,"old","new"));Throws(()=>s.Apply(dir,Enhanced(b),b.Fingerprint(),definitions,[],"b","b"));});
-Test("Partial write failure restores exact baseline",()=>{var dir=NewFolder();var b=Baseline();Write(b,dir);var s=new ApplyService(NewFolder(),()=>false);Throws(()=>s.Apply(dir,Enhanced(b),b.Fingerprint(),definitions,definitions,"b","b",n=>{if(n==2)throw new IOException("Simulated disk write failure");}));Assert(FileSet.Read(dir).Fingerprint()==b.Fingerprint());Assert(s.List().Single().State=="Restored");});
-Test("Interrupted transaction recovers on next invocation",()=>{var dir=NewFolder();var b=Baseline();Write(b,dir);var history=NewFolder();bool running=false;var s=new ApplyService(history,()=>running);Throws(()=>s.Apply(dir,Enhanced(b),b.Fingerprint(),definitions,definitions,"b","b",n=>{if(n==3){running=true;throw new IOException("Simulated interruption");}}));Assert(s.List().Single().State=="Prepared");new ApplyService(history,()=>false).RecoverPending(dir);Assert(FileSet.Read(dir).Fingerprint()==b.Fingerprint());});
-Test("Rollback protects external changes",()=>{var dir=NewFolder();var b=Baseline();Write(b,dir);var s=new ApplyService(NewFolder(),()=>false);s.Apply(dir,Enhanced(b),b.Fingerprint(),definitions,definitions,"b","b");File.AppendAllText(Path.Combine(dir,"Settings.xml")," ");var fingerprint=FileSet.Read(dir).Fingerprint();Throws(()=>s.RestorePrevious(dir,fingerprint));Assert(FileSet.Read(dir).Fingerprint()==fingerprint);});
-Test("Rollback removes only files created by its transaction",()=>{var dir=NewFolder();var b=Baseline();b.Remove("GraphicsConfigurationOverride.xml");Write(b,dir);var e=Enhanced(b);var s=new ApplyService(NewFolder(),()=>false);s.Apply(dir,e,b.Fingerprint(),definitions,definitions,"b","b");s.RestorePrevious(dir,e.Fingerprint());Assert(!File.Exists(Path.Combine(dir,"GraphicsConfigurationOverride.xml")));Assert(FileSet.Read(dir).Fingerprint()==b.Fingerprint());});
+Test("Apply and restore preserve unrelated files",()=>{var dir=NewGraphicsFolder();var b=Baseline();Write(b,dir);File.WriteAllText(Path.Combine(dir,"unrelated.txt"),"untouched");var service=new ApplyService(NewFolder(),()=>false);var e=Enhanced(b);service.Apply(dir,e,b.Fingerprint(),definitions,definitions,"build","build");Assert(FileSet.Read(dir).Fingerprint()==e.Fingerprint());service.RestorePrevious(dir,e.Fingerprint());Assert(FileSet.Read(dir).Fingerprint()==b.Fingerprint());Assert(File.ReadAllText(Path.Combine(dir,"unrelated.txt"))=="untouched");});
+Test("Game running blocks apply without writing",()=>{var dir=NewGraphicsFolder();var b=Baseline();Write(b,dir);var s=new ApplyService(NewFolder(),()=>true);Throws(()=>s.Apply(dir,Enhanced(b),b.Fingerprint(),definitions,definitions,"b","b"));Assert(FileSet.Read(dir).Fingerprint()==b.Fingerprint());});
+Test("Stale preview blocks overwriting external edits",()=>{var dir=NewGraphicsFolder();var b=Baseline();Write(b,dir);File.AppendAllText(Path.Combine(dir,"Settings.xml")," ");var changed=FileSet.Read(dir).Fingerprint();var s=new ApplyService(NewFolder(),()=>false);Throws(()=>s.Apply(dir,Enhanced(b),b.Fingerprint(),definitions,definitions,"b","b"));Assert(FileSet.Read(dir).Fingerprint()==changed);});
+Test("Old schema cannot remove new .fxcfg",()=>{var dir=NewGraphicsFolder();var b=Baseline();Write(b,dir);var s=new ApplyService(NewFolder(),()=>false);Throws(()=>s.Apply(dir,Baseline("4.3"),b.Fingerprint(),definitions,definitions,"b","b"));Assert(File.Exists(Path.Combine(dir,"Custom.4.4.fxcfg")));});
+Test("Changed game build/definitions block apply",()=>{var dir=NewGraphicsFolder();var b=Baseline();Write(b,dir);var s=new ApplyService(NewFolder(),()=>false);Throws(()=>s.Apply(dir,Enhanced(b),b.Fingerprint(),definitions,definitions,"old","new"));Throws(()=>s.Apply(dir,Enhanced(b),b.Fingerprint(),definitions,[],"b","b"));});
+Test("Partial write failure restores exact baseline",()=>{var dir=NewGraphicsFolder();var b=Baseline();Write(b,dir);var s=new ApplyService(NewFolder(),()=>false);Throws(()=>s.Apply(dir,Enhanced(b),b.Fingerprint(),definitions,definitions,"b","b",n=>{if(n==2)throw new IOException("Simulated disk write failure");}));Assert(FileSet.Read(dir).Fingerprint()==b.Fingerprint());Assert(s.List().Single().State=="Restored");});
+Test("Interrupted transaction recovers on next invocation",()=>{var dir=NewGraphicsFolder();var b=Baseline();Write(b,dir);var history=NewFolder();bool running=false;var s=new ApplyService(history,()=>running);Throws(()=>s.Apply(dir,Enhanced(b),b.Fingerprint(),definitions,definitions,"b","b",n=>{if(n==3){running=true;throw new IOException("Simulated interruption");}}));Assert(s.List().Single().State=="Prepared");new ApplyService(history,()=>false).RecoverPending(dir);Assert(FileSet.Read(dir).Fingerprint()==b.Fingerprint());});
+Test("Rollback protects external changes",()=>{var dir=NewGraphicsFolder();var b=Baseline();Write(b,dir);var s=new ApplyService(NewFolder(),()=>false);s.Apply(dir,Enhanced(b),b.Fingerprint(),definitions,definitions,"b","b");File.AppendAllText(Path.Combine(dir,"Settings.xml")," ");var fingerprint=FileSet.Read(dir).Fingerprint();Throws(()=>s.RestorePrevious(dir,fingerprint));Assert(FileSet.Read(dir).Fingerprint()==fingerprint);});
+Test("Rollback removes only files created by its transaction",()=>{var dir=NewGraphicsFolder();var b=Baseline();b.Remove("GraphicsConfigurationOverride.xml");Write(b,dir);var e=Enhanced(b);var s=new ApplyService(NewFolder(),()=>false);s.Apply(dir,e,b.Fingerprint(),definitions,definitions,"b","b");s.RestorePrevious(dir,e.Fingerprint());Assert(!File.Exists(Path.Combine(dir,"GraphicsConfigurationOverride.xml")));Assert(FileSet.Read(dir).Fingerprint()==b.Fingerprint());});
 Test("Migration preserves current-only fields",()=>{var old=Baseline("4.3");var doc=XmlIO.Read(old["Custom.4.3.fxcfg"]);doc.Root!.Element("NewField")!.Remove();doc.Root.Element("EnvironmentQuality")!.Value="3";old["Custom.4.3.fxcfg"]=XmlIO.Write(doc);var m=GraphicsModel.Migrate(old,Baseline());Assert(GraphicsModel.ActiveFile(m)=="Custom.4.4.fxcfg");Assert(GraphicsModel.Quality(m,"EnvironmentQuality")=="3");Assert(GraphicsModel.Quality(m,"NewField")=="preserve");});
 Test("PresentMon import filters process and calculates percentiles",()=>{var file=Path.Combine(NewFolder(),"frames.csv");File.WriteAllText(file,"Application,SwapChainAddress,MsBetweenPresents\nOther.exe,0,999\nEliteDangerous64.exe,1,10\nEliteDangerous64.exe,1,20\nEliteDangerous64.exe,1,60\n");var summary=PresentMonImport.Read(file,"FLAT");Assert(summary.Count==3&&summary.P99Ms==60&&summary.HitchesOver50Ms==1);Assert(Math.Abs(summary.AverageFps-1000d/30)<.001);Throws(()=>PresentMonImport.Read(file,"VR"));});
 Test("PresentMon multiple swapchains rejected",()=>{var file=Path.Combine(NewFolder(),"frames.csv");File.WriteAllText(file,"Application,SwapChainAddress,FrameTime\nEliteDangerous64.exe,1,10\nEliteDangerous64.exe,2,20\n");Throws(()=>PresentMonImport.Read(file,"FLAT"));});
 Test("Missing GPU counters remain unavailable",()=>{Assert(GpuRecorder.Number("[N/A]")==null);Assert(GpuRecorder.Number("NaN")==null);Assert(GpuRecorder.Number("4096")==4096);});
-Test("Apply blocks a mixed profile when an extra managed graphics file exists",()=>{var dir=NewFolder();var b=Baseline();Write(b,dir);File.WriteAllText(Path.Combine(dir,"DisplaySettings.xml"),"<DisplayConfig><ScreenWidth>1920</ScreenWidth></DisplayConfig>");var current=FileSet.Read(dir);var service=new ApplyService(NewFolder(),()=>false);Throws(()=>service.Apply(dir,Enhanced(b),current.Fingerprint(),definitions,definitions,"b","b"));Assert(FileSet.Read(dir).Fingerprint()==current.Fingerprint());Assert(service.List().Count==0);});
+Test("Apply blocks a mixed profile when an extra managed graphics file exists",()=>{var dir=NewGraphicsFolder();var b=Baseline();Write(b,dir);File.WriteAllText(Path.Combine(dir,"DisplaySettings.xml"),"<DisplayConfig><ScreenWidth>1920</ScreenWidth></DisplayConfig>");var current=FileSet.Read(dir);var service=new ApplyService(NewFolder(),()=>false);Throws(()=>service.Apply(dir,Enhanced(b),current.Fingerprint(),definitions,definitions,"b","b"));Assert(FileSet.Read(dir).Fingerprint()==current.Fingerprint());Assert(service.List().Count==0);});
 Test("Live benchmark CSV can be read while its writer remains open",()=>{var store=new BenchmarkStore(NewFolder());var run=new BenchmarkRun();store.Save(run);using var recorder=new GpuRecorder(store,run);Assert(store.Samples(run.Id).Count==0);var path=Path.Combine(store.Folder(run.Id),"other.csv");using var writer=new StreamWriter(path){AutoFlush=true};writer.WriteLine("seconds,memory,util,temp,clock,power");writer.WriteLine("1,1024,50,40,1000,100");var second=new BenchmarkRun();store.Save(second);var secondPath=Path.Combine(store.Folder(second.Id),"gpu.csv");using var stream=new FileStream(secondPath,FileMode.Create,FileAccess.Write,FileShare.Read);using var liveWriter=new StreamWriter(stream){AutoFlush=true};liveWriter.WriteLine("seconds,memory,util,temp,clock,power");liveWriter.WriteLine("1,1024,50,40,1000,100");Assert(store.Samples(second.Id).Single().MemoryMiB==1024);});
 
 Test("Comparison detects differences unique to the third preset",()=>{var a=Baseline();var b=a.Clone();var c=Enhanced(a);var rows=PresetComparison.Build(new[]{new ComparisonSource("A",a,definitions),new ComparisonSource("B",b,definitions),new ComparisonSource("C",c,definitions)},false,true);Assert(rows.Count==2);Assert(rows.All(r=>!r.Cells[0].Different&&!r.Cells[1].Different&&r.Cells[2].Different));Assert(rows.All(r=>r.Cells[0].Value=="1024"&&r.Cells[2].Value=="4096"));});
@@ -134,19 +145,19 @@ Test("Write policy accepts only exact recognised filenames",()=>{
     foreach(var name in new[]{"Unrelated.xml","Other.fxcfg","Other.start","Custom.x.4.fxcfg","Custom.4.4.fxcfg\n","../Settings.xml","Settings.xml:stream","Custom.4.4.fxcfg.xml"})Assert(!ManagedGraphicsFiles.CanWrite(name),name);
 });
 Test("Changed unknown XML cannot be applied and creates no journal",()=>{
-    var dir=NewFolder();var b=Baseline();b["Unrelated.xml"]=Encoding.UTF8.GetBytes("<Other>original</Other>");Write(b,dir);
+    var dir=NewGraphicsFolder();var b=Baseline();b["Unrelated.xml"]=Encoding.UTF8.GetBytes("<Other>original</Other>");Write(b,dir);
     var desired=Enhanced(b);desired["Unrelated.xml"]=Encoding.UTF8.GetBytes("<Other>changed</Other>");
     var service=new ApplyService(NewFolder(),()=>false);
     Throws(()=>service.Apply(dir,desired,b.Fingerprint(),definitions,definitions,"b","b"));
     Assert(FileSet.Read(dir).Fingerprint()==b.Fingerprint()&&service.List().Count==0);
 });
 Test("Unknown files cannot be introduced by a snapshot",()=>{
-    var dir=NewFolder();var b=Baseline();Write(b,dir);var desired=Enhanced(b);desired["Other.start"]=Encoding.UTF8.GetBytes("High");
+    var dir=NewGraphicsFolder();var b=Baseline();Write(b,dir);var desired=Enhanced(b);desired["Other.start"]=Encoding.UTF8.GetBytes("High");
     var service=new ApplyService(NewFolder(),()=>false);Throws(()=>service.Apply(dir,desired,b.Fingerprint(),definitions,definitions,"b","b"));
     Assert(FileSet.Read(dir).Fingerprint()==b.Fingerprint()&&service.List().Count==0);
 });
 Test("Unchanged unknown snapshots are captured but excluded from transaction writes",()=>{
-    var dir=NewFolder();var b=Baseline();b["Unrelated.xml"]=Encoding.UTF8.GetBytes("<Other>original</Other>");Write(b,dir);
+    var dir=NewGraphicsFolder();var b=Baseline();b["Unrelated.xml"]=Encoding.UTF8.GetBytes("<Other>original</Other>");Write(b,dir);
     var service=new ApplyService(NewFolder(),()=>false);service.Apply(dir,Enhanced(b),b.Fingerprint(),definitions,definitions,"b","b");
     Assert(!service.List().Single().Before.ContainsKey("Unrelated.xml"));
     File.WriteAllText(Path.Combine(dir,"Unrelated.xml"),"<Other>external edit</Other>");
@@ -155,17 +166,77 @@ Test("Unchanged unknown snapshots are captured but excluded from transaction wri
     Assert(File.ReadAllBytes(Path.Combine(dir,"GraphicsConfigurationOverride.xml")).SequenceEqual(b["GraphicsConfigurationOverride.xml"]));
 });
 Test("Unknown destination files absent from snapshot survive apply",()=>{
-    var dir=NewFolder();var b=Baseline();Write(b,dir);File.WriteAllText(Path.Combine(dir,"Unrelated.xml"),"<Other/>");
+    var dir=NewGraphicsFolder();var b=Baseline();Write(b,dir);File.WriteAllText(Path.Combine(dir,"Unrelated.xml"),"<Other/>");
     var service=new ApplyService(NewFolder(),()=>false);service.Apply(dir,Enhanced(b),FileSet.Read(dir).Fingerprint(),definitions,definitions,"b","b");
     Assert(File.ReadAllText(Path.Combine(dir,"Unrelated.xml"))=="<Other/>");
 });
 Test("Old rollback containing unknown files fails before restoring any file",()=>{
-    var dir=NewFolder();var library=NewFolder();var b=Baseline();Write(b,dir);
+    var dir=NewGraphicsFolder();var library=NewFolder();var b=Baseline();Write(b,dir);
     var service=new ApplyService(library,()=>false);service.Apply(dir,Enhanced(b),b.Fingerprint(),definitions,definitions,"b","b");
     var record=service.List().Single();record.Before["Unrelated.xml"]=null;record.After["Unrelated.xml"]=FileSet.Hash(Encoding.UTF8.GetBytes("<Other/>"));
     JsonIO.Save(Path.Combine(library,"transactions",record.Id,"transaction.json"),record);
     var fingerprint=FileSet.Read(dir).Fingerprint();Throws(()=>service.RestorePrevious(dir,fingerprint));
     Assert(FileSet.Read(dir).Fingerprint()==fingerprint&&service.List().Single().State=="Applied");
+});
+Test("Wrong directory structure and wrong Settings root cannot receive writes",()=>{
+    var wrong=NewFolder();var b=Baseline();Write(b,wrong);var service=new ApplyService(NewFolder(),()=>false);
+    Throws(()=>service.Apply(wrong,Enhanced(b),b.Fingerprint(),definitions,definitions,"b","b"));Assert(service.List().Count==0);
+    var dir=NewGraphicsFolder();var bad=b.Clone();bad["Settings.xml"]=Encoding.UTF8.GetBytes("<Other><PresetName>Custom</PresetName></Other>");Write(bad,dir);
+    Throws(()=>service.Apply(dir,Enhanced(b),bad.Fingerprint(),definitions,definitions,"b","b"));Assert(FileSet.Read(dir).Fingerprint()==bad.Fingerprint());
+});
+Test("Same-thread competing libraries cannot bypass target lock via path spelling",()=>{
+    var dir=NewGraphicsFolder();var b=Baseline();Write(b,dir);var a=new ApplyService(NewFolder(),()=>false);var other=new ApplyService(NewFolder(),()=>false);
+    a.Apply(dir,Enhanced(b),b.Fingerprint(),definitions,definitions,"b","b",n=>{if(n==1){
+        var alias=Path.Combine(dir,".").ToUpperInvariant();
+        Throws(()=>other.Apply(alias,Enhanced(b),FileSet.Read(dir).Fingerprint(),definitions,definitions,"b","b"));
+        Throws(()=>other.RecoverPending(alias));Throws(()=>a.RestorePrevious(alias,FileSet.Read(dir).Fingerprint()));
+    }});
+    Assert(a.List().Single().State=="Applied"&&other.List().Count==0);
+    other.Apply(dir,b,FileSet.Read(dir).Fingerprint(),definitions,definitions,"b","b");Assert(FileSet.Read(dir).Fingerprint()==b.Fingerprint());
+});
+Test("External edit between replacements is preserved and recovery pauses",()=>{
+    var dir=NewGraphicsFolder();var b=Baseline();Write(b,dir);var service=new ApplyService(NewFolder(),()=>false);
+    Throws(()=>service.Apply(dir,Enhanced(b),b.Fingerprint(),definitions,definitions,"b","b",n=>{if(n==1)File.AppendAllText(Path.Combine(dir,"Custom.4.4.fxcfg")," ");}));
+    Assert(File.ReadAllText(Path.Combine(dir,"Custom.4.4.fxcfg")).EndsWith(" "));
+    Assert(service.List().Single().State=="Prepared");
+});
+Test("Independent process crash releases lock but other library must wait for recovery",()=>{
+    var dir=NewGraphicsFolder();var b=Baseline();Write(b,dir);var library=NewFolder();
+    var start=new System.Diagnostics.ProcessStartInfo(Environment.ProcessPath!){UseShellExecute=false,RedirectStandardOutput=true,RedirectStandardError=true,CreateNoWindow=true};
+    if(string.Equals(Path.GetFileNameWithoutExtension(Environment.ProcessPath),"dotnet",StringComparison.OrdinalIgnoreCase))start.ArgumentList.Add(System.Reflection.Assembly.GetExecutingAssembly().Location);
+    start.ArgumentList.Add("--hold-transaction");start.ArgumentList.Add(dir);start.ArgumentList.Add(library);
+    using var child=System.Diagnostics.Process.Start(start)!;
+    try
+    {
+        var ready=child.StandardOutput.ReadLineAsync();Assert(ready.Wait(TimeSpan.FromSeconds(15))&&ready.Result=="LOCKED","Child did not acquire transaction lock");
+        var other=new ApplyService(NewFolder(),()=>false);
+        Assert(FileSet.Read(dir).Fingerprint()!=b.Fingerprint(),"Child must have changed a file before termination");
+        Throws(()=>other.Apply(dir,b,FileSet.Read(dir).Fingerprint(),definitions,definitions,"b","b"));
+        Throws(()=>other.RecoverPending(dir));
+        child.Kill();Assert(child.WaitForExit(5000));
+        Throws(()=>other.Apply(dir,b,FileSet.Read(dir).Fingerprint(),definitions,definitions,"b","b"));
+        new ApplyService(library,()=>false).RecoverPending(dir);Assert(FileSet.Read(dir).Fingerprint()==b.Fingerprint());
+        other.Apply(dir,Enhanced(b),b.Fingerprint(),definitions,definitions,"b","b");Assert(other.List().Single().State=="Applied");
+    }
+    finally {if(!child.HasExited){child.Kill();child.WaitForExit(5000);}}
+});
+Test("Interrupted restore is journalled and can recover",()=>{
+    var dir=NewGraphicsFolder();var b=Baseline();Write(b,dir);var library=NewFolder();var service=new ApplyService(library,()=>false);
+    var desired=Enhanced(b);GraphicsModel.Set(desired,"Settings.xml","GammaOffset","0.25");
+    service.Apply(dir,desired,b.Fingerprint(),definitions,definitions,"b","b");
+    int checks=0;var interrupted=new ApplyService(library,()=>++checks>=4);
+    Throws(()=>interrupted.RestorePrevious(dir,FileSet.Read(dir).Fingerprint()));Assert(service.List().Single().State=="Prepared");
+    Throws(()=>service.RestorePrevious(dir,FileSet.Read(dir).Fingerprint()));
+    service.RecoverPending(dir);Assert(FileSet.Read(dir).Fingerprint()==b.Fingerprint());
+});
+Test("Junction ancestors in targets and libraries are rejected",()=>{
+    var real=NewFolder();var linked=Path.Combine(NewFolder(),"linked");
+    var start=new System.Diagnostics.ProcessStartInfo("powershell.exe"){UseShellExecute=false,CreateNoWindow=true,RedirectStandardOutput=true,RedirectStandardError=true};
+    start.ArgumentList.Add("-NoProfile");start.ArgumentList.Add("-Command");
+    start.ArgumentList.Add("New-Item -ItemType Junction -Path '"+linked.Replace("'","''")+"' -Target '"+real.Replace("'","''")+"' -ErrorAction Stop | Out-Null");
+    using(var process=System.Diagnostics.Process.Start(start)!){Assert(process.WaitForExit(10000)&&process.ExitCode==0,"Could not create isolated junction fixture");}
+    Throws(()=>new ApplyService(linked,()=>false));Throws(()=>GraphicsTarget.ValidateDirectory(Path.Combine(linked,"Frontier Developments","Elite Dangerous","Options","Graphics")));
+    Assert(!Directory.Exists(Path.Combine(real,"transactions")));
 });
 int failures=0;foreach(var (name,action) in tests){try{action();Console.WriteLine("PASS "+name);}catch(Exception e){failures++;Console.WriteLine("FAIL "+name+" — "+e.Message);}}
 Console.WriteLine($"{tests.Count-failures}/{tests.Count} tests passed. Isolated fixtures: {root}");return failures==0?0:1;
