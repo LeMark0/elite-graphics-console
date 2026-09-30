@@ -86,7 +86,7 @@ public sealed record AppPaths
 {
     public string Graphics { get; set; } = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"Frontier Developments","Elite Dangerous","Options","Graphics");
     public string Game { get; set; } = "";
-    public string Legacy { get; set; } = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory),"ED scripts","presets");
+    public string Legacy { get; set; } = "";
     public string Definitions => Path.Combine(Game,"GraphicsConfiguration.xml");
     public byte[] ReadDefinitions() => File.Exists(Definitions) ? File.ReadAllBytes(Definitions) : [];
     public string Build()

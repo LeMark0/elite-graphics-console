@@ -2,6 +2,7 @@ param([switch]$Publish, [switch]$UiTests, [string]$DotnetPath = 'dotnet')
 $ErrorActionPreference = 'Stop'
 Push-Location $PSScriptRoot
 try {
+    & ./tools/Check-PublicFiles.ps1
     & $DotnetPath run --project tests/EliteGraphics.Tests/EliteGraphics.Tests.csproj -c Release
     if ($LASTEXITCODE -ne 0) { throw 'Core tests failed.' }
     & $DotnetPath build src/EliteGraphics.App/EliteGraphics.App.csproj -c Release
@@ -44,6 +45,7 @@ try {
         if ($noticeCount -lt 2) { throw 'Runtime legal notices were not found in SDK packs; inspect the SDK before packaging.' }
         $zip = Join-Path $artifactRoot "EliteGraphicsConsole-$version-win-x64.zip"
         Compress-Archive -LiteralPath $package -DestinationPath $zip -Force
+        & ./tools/Check-PublicFiles.ps1 -PackagePath $zip
         $hash = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash
         "$hash  $([IO.Path]::GetFileName($zip))" | Set-Content -LiteralPath "$zip.sha256" -Encoding ascii
         Write-Output "Package: $zip"

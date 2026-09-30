@@ -2,9 +2,9 @@
 
 ## Visible star count
 
-The [linked author's experiment](https://www.reddit.com/r/EliteDangerous/comments/1wh6y9w/sky_is_a_lot_prettier_with_180k_stars_visible/) changes `GalaxyMap/Low|Medium|High/StarInstanceCount` to 180000. The author reports a denser flight sky with no observed flight FPS/loading penalty on their system, but lower galaxy-map FPS while moving quickly near the core. This is anecdotal, not a measurement on the user's RTX 3080 Ti / Quest 2 setup. Loading and VR frame times still need an A/B test.
+The [linked author's experiment](https://www.reddit.com/r/EliteDangerous/comments/1wh6y9w/sky_is_a_lot_prettier_with_180k_stars_visible/) changes `GalaxyMap/Low|Medium|High/StarInstanceCount` to 180000. The author reports a denser flight sky with no observed flight FPS/loading penalty on their system, but lower galaxy-map FPS while moving quickly near the core. This is anecdotal and has not been independently benchmarked by this project. Loading and VR frame times still need an A/B test.
 
-Local Odyssey definitions inspected for this release specify 2000 at Low and Medium, and 4000 at High. The user's existing High override was already 5000. The app resolves the active tier using `GalaxyMapQuality`; it does not assume High or use `EnvironmentQuality`.
+Local Odyssey definitions inspected for this release specify 2000 at Low and Medium, and 4000 at High. The app resolves the active tier using `GalaxyMapQuality`; it does not assume High or use `EnvironmentQuality`.
 
 The effective Visible star count row is available without an existing override. Editing updates only StarInstanceCount in the selected tier, preserving other tiers, nebula settings, duplicate sections and unrelated customisations. Conflicting duplicate counts display as Ambiguous; an explicit edit assigns the chosen value to each selected-tier star-count node. Unknown selectors are unavailable, not guessed. Non-negative 32-bit integers are accepted as XML values; this is not a tested engine limit or a promise of safe performance at extreme counts. No value is applied automatically.
 
@@ -24,7 +24,7 @@ Examples: DOF has internal nodes Off / Low / Medium but display labels Off / Med
 
 | Control | Mapping | Evidence / limitation |
 | --- | --- | --- |
-| Anti-aliasing | 0 Off, 1 FXAA, 4 SMAA | FXAA previously verified from the user's game save. SMAA is correlated with Ultra defaults and community configurations; not a fresh in-game toggle test. No invented modes 2 or 3. |
+| Anti-aliasing | 0 Off, 1 FXAA, 4 SMAA | FXAA previously verified by comparing an in-game selection with its saved configuration. SMAA is correlated with Ultra defaults and community configurations; not a fresh in-game toggle test. No invented modes 2 or 3. |
 | Upscaling | 0 Normal, 1 AMD FidelityFX CAS, 2 AMD FSR 1.0 | Community configuration with upscaling disabled establishes 0; 1/2 labels inferred from game menu choices and shipped VR/flat presets. Still needs a controlled game-save comparison to independently verify those labels. |
 | Filtering | 0 Trilinear, 1–4 Anisotropic 2×/4×/8×/16× | Inferred menu ordering, corroborated by shipped quality presets; not a fresh game-save test. |
 | Texture quality | 0 Low, 1 Medium, 2 High | Legacy ordinal mapping; shipped files corroborate 1/2. |

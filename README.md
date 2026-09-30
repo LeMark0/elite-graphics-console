@@ -8,11 +8,11 @@ A Windows desktop graphics profile manager for Elite Dangerous Odyssey, with a c
 
 Download the Windows x64 ZIP from this repository's [releases](https://github.com/LeMark0/elite-graphics-console/releases), extract it, and run `EliteGraphicsConsole.exe`. The package includes its .NET runtime; no SDK or administrator access is required. The executable is not code-signed.
 
-Public-readiness work ships in [small milestones](docs/PUBLIC-READINESS.md). Version 1.9.2 is a prerelease with managed-file write restrictions, target validation and transaction locking. Repository/release gates and general-user setup remain pending; this is not yet a general-user release. See [compatibility and recovery details](docs/RELEASE-1.9.2.md).
+Public-readiness work ships in [small milestones](docs/PUBLIC-READINESS.md). Version 1.9.3 adds public-file privacy cleanup and current .NET 10 LTS servicing, retaining managed-file restrictions, target validation and transaction locking. Repository/release gates and general-user setup remain pending; this is not yet a general-user release. See [release details](docs/RELEASE-1.9.3.md) and [recovery instructions](docs/RELEASE-1.9.2.md).
 
 To install under your user account and create a desktop shortcut, run `Install.ps1` from the extracted folder. Installation does not change Elite's graphics files.
 
-Close Elite normally before the first launch. The app captures the existing graphics files byte for byte as a protected baseline, prepares a separate 4096 planet + galaxy candidate, and imports the old batch switcher's VR/FLAT folders when present. It never runs the batch file. Check **Paths** if installation discovery needs correcting.
+Close Elite normally before the first launch. The app captures the existing graphics files byte for byte as a protected baseline, prepares a separate 4096 planet + galaxy candidate, and imports legacy VR/FLAT folders only when a legacy path has been explicitly configured. It never runs the batch file. Check **Paths** if installation discovery needs correcting.
 
 ## Everyday workflow
 
@@ -46,7 +46,7 @@ To use an isolated library for development: `EliteGraphicsConsole.exe --data-dir
 
 ## Build
 
-On Windows with .NET SDK 8.0.424 or a newer 8.0 servicing SDK:
+On Windows with .NET SDK 10.0.401 (pinned in global.json):
 
 ```powershell
 ./build.ps1
@@ -57,6 +57,8 @@ On Windows with .NET SDK 8.0.424 or a newer 8.0 servicing SDK:
 The first command runs the isolated core tests and builds WPF. `-Publish` also makes a self-contained Windows x64 ZIP and SHA-256 file in `artifacts`. `-DotnetPath` accepts a portable SDK executable. The included GitHub Actions template runs the same checks on Windows when enabled; uploading it requires GitHub CLI workflow permission. See [architecture](docs/ARCHITECTURE.md) for maintenance details.
 
 An independent personal tool, not affiliated with Frontier Developments, Meta or NVIDIA.
+
+See [public-file privacy](docs/PRIVACY.md) and [dependencies and servicing](docs/DEPENDENCIES.md).
 
 ### All settings (1.2)
 

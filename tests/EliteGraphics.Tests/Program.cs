@@ -25,6 +25,12 @@ if(args.Length==3&&args[0]=="--hold-transaction")
 var tests=new List<(string Name,Action Run)>();
 void Test(string name,Action action)=>tests.Add((name,action));
 
+Test("Legacy import has no personal default and retains explicit saved paths",()=>{
+    Assert(new AppPaths().Legacy=="");
+    var path=Path.Combine(NewFolder(),"paths.json");var saved=new AppPaths{Legacy=NewFolder()};JsonIO.Save(path,saved);
+    Assert(JsonIO.Load<AppPaths>(path).Legacy==saved.Legacy);
+});
+
 Test("Medium selectors ignore dormant Ultra/High overrides",()=>{var b=Baseline();Assert(GraphicsModel.Texture(b,definitions,"Planets").Value=="1024");Assert(GraphicsModel.Texture(b,definitions,"GalaxyBackground").Value=="1024");});
 Test("Combined hi-res changes only selected texture values",()=>{var b=Baseline();var e=Enhanced(b);Assert(GraphicsModel.Texture(e,definitions,"Planets").Value=="4096");Assert(GraphicsModel.Texture(e,definitions,"GalaxyBackground").Value=="4096");Assert(e.Where(x=>x.Key!="GraphicsConfigurationOverride.xml").All(x=>x.Value.SequenceEqual(b[x.Key])));var d=GraphicsModel.Diff(b,e);Assert(d.Count==2);Assert(d.All(x=>x.Path.Contains("Medium[1]/TextureSize[1]")));Assert(Encoding.UTF8.GetString(e["GraphicsConfigurationOverride.xml"]).Contains("<!-- keep -->"));});
 Test("Unknown overrides, HUD and environment mapping survive",()=>{var e=Enhanced(Baseline());var doc=XmlIO.Read(e["GraphicsConfigurationOverride.xml"]);Assert(doc.Root!.Element("GUIColour")!.Element("Default")!.Element("MatrixRed")!.Value=="0.4, 0.2, 1");Assert(doc.Root.Elements("GalaxyBackground").Count()==2);Assert(doc.Root.Element("Envmap")!.Element("High")!.Element("NumMips")!.Value=="10");});

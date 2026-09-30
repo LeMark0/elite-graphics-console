@@ -1,6 +1,6 @@
 # Architecture
 
-`EliteGraphics.Core` is a dependency-free .NET 8 library. `EliteGraphics.App` is a Windows WPF shell. `EliteGraphics.Tests` is an executable test harness using generated temporary fixtures; it never targets the real graphics directory.
+`EliteGraphics.Core` is a dependency-free .NET 10 library. `EliteGraphics.App` is a Windows WPF shell. `EliteGraphics.Tests` is an executable test harness using generated temporary fixtures; it never targets the real graphics directory.
 
 ## Profiles
 
