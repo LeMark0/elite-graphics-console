@@ -36,7 +36,7 @@ public partial class MainWindow : Window
 
     public MainWindow(string dataRoot)
     {
-        InitializeComponent();foreach(var column in DiffGrid.Columns.OfType<DataGridTextColumn>())column.ElementStyle=(Style)FindResource("CellText");store=new ProfileStore(dataRoot);benchmarks=new BenchmarkStore(dataRoot);apply=new ApplyService(dataRoot,GameRunning);settingsFile=Path.Combine(dataRoot,"settings.json");
+        InitializeComponent();AppVersionText.Text="ELITE GRAPHICS CONSOLE  /  "+typeof(MainWindow).Assembly.GetName().Version!.ToString(3);foreach(var column in DiffGrid.Columns.OfType<DataGridTextColumn>())column.ElementStyle=(Style)FindResource("CellText");store=new ProfileStore(dataRoot);benchmarks=new BenchmarkStore(dataRoot);apply=new ApplyService(dataRoot,GameRunning);settingsFile=Path.Combine(dataRoot,"settings.json");
         settings=File.Exists(settingsFile)?JsonIO.Load<LocalSettings>(settingsFile):new LocalSettings();
         if(settings.Paths.Game.Length==0)settings.Paths.Game=DiscoverGame();
         ModeBox.ItemsSource=new[]{"VR","FLAT"};PlanetBox.ItemsSource=new[]{512,1024,2048,2560,4096};GalaxyBox.ItemsSource=new[]{512,1024,2048,2560,4096};

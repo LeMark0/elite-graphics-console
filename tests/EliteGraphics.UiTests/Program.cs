@@ -43,6 +43,7 @@ internal static class UiTests
             window=new MainWindow(root);window.Show();Pump();
             object? Call(string name,params object?[] args)=>typeof(MainWindow).GetMethod(name,BindingFlags.Instance|BindingFlags.NonPublic)!.Invoke(window,args);
             T Field<T>(string name)=>(T)typeof(MainWindow).GetField(name,BindingFlags.Instance|BindingFlags.NonPublic)!.GetValue(window)!;
+            Assert(Field<TextBlock>("AppVersionText").Text=="ELITE GRAPHICS CONSOLE  /  "+typeof(MainWindow).Assembly.GetName().Version!.ToString(3),"Status bar shows the running assembly version");
             TerminalSetting Row(string name)=>Field<List<TerminalSetting>>("terminalRows").Single(r=>r.Entry.Setting==name);
             bool Commit(TerminalSetting row)=>(bool)Call("CommitInline",row)!;
             void QueueReview(bool accept)=>Dispatcher.CurrentDispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle,new Action(()=>{
