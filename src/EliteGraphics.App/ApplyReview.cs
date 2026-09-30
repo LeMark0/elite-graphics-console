@@ -11,7 +11,7 @@ public partial class MainWindow
         var window=CreateApplyReview(changes);return window.ShowDialog()==true;
     }
     Window CreateApplyReview(IReadOnlyList<SettingDiff> changes)
-        =>CreateChangeReview(changes,"REVIEW / APPLY PRESET",selected?.DisplayName??"Preset","CURRENT GAME","SELECTED PRESET","Apply these files","Target: "+settings.Paths.Graphics+"\nA verified rollback snapshot is saved before replacement. Restart Elite to use the applied settings.");
+        =>CreateChangeReview(changes,"REVIEW / APPLY SETTINGS",selected?.Name??"Current settings","CURRENT GAME","DISPLAYED VALUES","Apply","Target: "+settings.Paths.Graphics+"\nApplies the displayed values without creating or updating a preset. A verified rollback snapshot is saved before replacement. Restart Elite to use the applied settings.");
 
     bool ReviewSave(FileSet before,FileSet after,string name,string mode,string notes,string baseline,bool update=false,byte[]? definitions=null)
     {

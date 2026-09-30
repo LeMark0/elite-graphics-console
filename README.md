@@ -16,10 +16,10 @@ Close Elite normally before the first launch. The app captures the existing grap
 
 ## Everyday workflow
 
-1. Select a revision. **Settings** shows categorized editable rows; planet and galaxy textures resolve the selected tier from saved definitions and overrides.
+1. Select a revision or **Load current settings**. **Settings** shows categorized editable rows; planet and galaxy textures resolve the selected tier from saved definitions and overrides.
 2. Edit a value inline (Enter or focus loss commits; Esc cancels), or use **More → Advanced XML editor**. **Update this preset** saves a revision; **Fork this preset** creates a new preset. Protected baselines are fork-only.
 3. Open **Compare** and select two or more presets. Each selected revision has its own column; amber cells differ from the first column. **Differences only** hides equal settings. The resolved view shows friendly quality labels and inferred effective planet/background values; **Raw XML / all overrides** includes older `.fxcfg` files and indexed duplicate elements. Collapse the preset picker for more table space. Selections are remembered. Formatting-only changes are omitted from this table; the apply preview still reports them.
-4. With Elite closed, choose **Apply preset** in the header and inspect the final diff. Verified backups are retained for **More → Restore previous apply**.
+4. With Elite closed, choose **Apply** in the header and inspect the final diff. Apply uses the displayed values, including unsaved edits; creating or saving a preset is optional. **APPLIED** describes the game files; an asterisk separately marks unsaved preset changes. Verified backups are retained for **More → Restore previous apply**.
 5. Launch Elite through your usual route. This app does not launch a VR runtime or modify driver/mod configuration.
 6. Record matching benchmark runs before deciding whether a candidate improves the experience.
 

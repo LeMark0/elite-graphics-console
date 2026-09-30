@@ -17,7 +17,8 @@ internal static class UiTests
     static int Main()
     {
         var root=Path.Combine(Path.GetTempPath(),"egc-ui-"+Guid.NewGuid().ToString("N"));Directory.CreateDirectory(root);
-        var game=Path.Combine(root,"game");var graphics=Path.Combine(root,"graphics");Directory.CreateDirectory(game);Directory.CreateDirectory(graphics);
+        var game=Path.Combine(root,"game");var graphics=Path.Combine(root,"Frontier Developments","Elite Dangerous","Options","Graphics");Directory.CreateDirectory(game);Directory.CreateDirectory(graphics);
+        File.WriteAllText(Path.Combine(game,"VersionInfo.txt"),"{\"Version\":\"test\"}");
         var defs=Encoding.UTF8.GetBytes("<GraphicsConfig><Environment><Low><LocalisationName>L</LocalisationName><Item><Feature>Planets</Feature><QualitySetting>0</QualitySetting></Item><Item><Feature>GalaxyBackground</Feature><QualitySetting>0</QualitySetting></Item></Low></Environment><Planets><Low><TextureSize>1024</TextureSize></Low></Planets><GalaxyBackground><Low><TextureSize>1024</TextureSize></Low></GalaxyBackground><Terrain><Low><LocalisationName>L</LocalisationName></Low></Terrain><HBAO><Off><LocalisationName>O</LocalisationName></Off></HBAO><Volumetrics><Low><LocalisationName>L</LocalisationName></Low></Volumetrics></GraphicsConfig>");
         var starDefs=XmlIO.Read(defs);starDefs.Root!.Add(System.Xml.Linq.XElement.Parse("<GalaxyMap><Low><LocalisationName>$QUALITY_LOW;</LocalisationName><StarInstanceCount>2000</StarInstanceCount></Low></GalaxyMap>"));defs=XmlIO.Write(starDefs);
         File.WriteAllBytes(Path.Combine(game,"GraphicsConfiguration.xml"),defs);
@@ -53,9 +54,10 @@ internal static class UiTests
             }));
             var hmd=Row("HMD image quality");hmd.Input="1.1";Assert(Commit(hmd),"Inline decimal commits from integer serialization");
             Assert(GraphicsModel.Quality((FileSet)Call("Edited")!,"HMDRenderTargetMultiplier")=="1.1","Shared draft retains inline multiplier");
-            Assert(Field<Button>("UpdatePresetButton").IsEnabled&&!Field<Button>("HeaderApplyButton").IsEnabled,"Dirty preset can update but cannot apply");
+            Assert(Field<Button>("UpdatePresetButton").IsEnabled&&Field<Button>("HeaderApplyButton").IsEnabled,"Dirty preset can update or apply directly");
             hmd=Row("HMD image quality");hmd.Input="invalid";Assert(!Commit(hmd)&&hmd.Error.Length>0,"Invalid inline edit remains visible");
             Assert(!Field<Button>("UpdatePresetButton").IsEnabled&&!Field<Button>("ForkPresetButton").IsEnabled,"Invalid edit blocks save and fork");
+            Assert(!Field<Button>("HeaderApplyButton").IsEnabled,"Invalid edit blocks Apply");
             Call("UpdateInventory");Assert(Row("HMD image quality")==hmd&&hmd.Input=="invalid","Refresh does not discard invalid input");
             var ss=Row("Supersampling");ss.Input="1.2";Assert(!Commit(ss)&&hmd.Input=="invalid","Second edit cannot discard an invalid first edit");
             ss.Input=ss.Entry.Value;hmd.Input=hmd.Entry.Value;Call("RefreshDirty");Assert(Field<Button>("UpdatePresetButton").IsEnabled,"Cancelling pending values restores save availability");
@@ -118,6 +120,22 @@ internal static class UiTests
             Assert(scroll.HorizontalOffset>0&&scroll.VerticalOffset>0,"Triangle controls scroll on their respective axes");
             Capture(scrollWindow,Path.Combine(root,"scrollbars.png"),460,260);scrollWindow.Close();
             Call("LoadProfile",original,null,null); // Leave a clean workspace for Close.
+            var revisionCount=store.List().Count;
+            hmd=Row("HMD image quality");hmd.Input="1.3";Assert(Commit(hmd),"Preset draft accepts direct-apply edit");
+            QueueReview(false);Call("Apply_Click",window,new RoutedEventArgs());
+            Assert(FileSet.Read(graphics).Fingerprint()==files.Fingerprint()&&Row("HMD image quality").Entry.Value=="1.3","Cancelled draft apply preserves game and draft");
+            QueueReview(true);Call("Apply_Click",window,new RoutedEventArgs());
+            Assert(GraphicsModel.Quality(FileSet.Read(graphics),"HMDRenderTargetMultiplier")=="1.3"&&store.List().Count==revisionCount,"Draft Apply writes game without saving a revision");
+            Assert(GraphicsModel.Quality(store.Files(original.Id),"HMDRenderTargetMultiplier")=="1","Direct Apply preserves source preset");
+            Assert(Field<TextBlock>("AppliedLabel").Text=="APPLIED"&&!Field<Button>("HeaderApplyButton").IsEnabled&&Field<TextBlock>("ProfileTitle").Text.EndsWith(" *"),"Applied draft retains unsaved marker and disables redundant Apply");
+            Call("LoadProfile",original,null,null);Call("LoadCurrentState");
+            hmd=Row("HMD image quality");hmd.Input="1.4";Assert(Commit(hmd)&&Field<Button>("HeaderApplyButton").IsEnabled,"Current settings draft can Apply without a preset");
+            QueueReview(true);Call("Apply_Click",window,new RoutedEventArgs());
+            Assert(GraphicsModel.Quality(FileSet.Read(graphics),"HMDRenderTargetMultiplier")=="1.4"&&store.List().Count==revisionCount&&Field<ListBox>("ProfilesList").SelectedItem==null,"Current workspace Apply preserves empty selection and preset count");
+            Assert(Field<Button>("SaveCurrentButton").IsEnabled&&Field<TextBlock>("AppliedLabel").Text=="APPLIED","Applied current settings can still be saved as a preset");
+            new ApplyService(root,()=>false).RestorePrevious(graphics,FileSet.Read(graphics).Fingerprint());
+            Assert(GraphicsModel.Quality(FileSet.Read(graphics),"HMDRenderTargetMultiplier")=="1.3","Direct workspace Apply retains rollback");
+            Call("LoadProfile",original,null,null);
         }
         catch(Exception ex){failures++;Console.WriteLine("FAIL "+(ex.InnerException??ex));}
         finally{if(window!=null){typeof(MainWindow).GetField("terminalRows",BindingFlags.Instance|BindingFlags.NonPublic)?.SetValue(window,new List<TerminalSetting>());window.Hide();}app.Shutdown();}

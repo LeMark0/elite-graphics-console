@@ -110,15 +110,17 @@ public partial class MainWindow : Window
     void UpdateApplyHeader()
     {
         if(AppliedLabel==null)return;
-        var known=selected!=null&&checkedGameFiles!=null;
-        var same=known&&selected!.Hashes.Count==checkedGameFiles!.Count&&selected.Hashes.All(x=>checkedGameFiles.TryGetValue(x.Key,out var bytes)&&FileSet.Hash(bytes)==x.Value);
+        FileSet? draft=null;string? error=null;
+        if(selected!=null)try{draft=Edited();}catch(Exception ex){error=ex.Message;}
+        var known=draft!=null&&checkedGameFiles!=null;
+        var same=known&&draft!.Fingerprint()==checkedGameFiles!.Fingerprint();
         var dirty=IsDirty;
-        AppliedLabel.Text=currentWorkspace?(dirty?"UNSAVED CHANGES":"CURRENT GAME SETTINGS"):dirty?"UNSAVED CHANGES":!known?"STATUS UNKNOWN":same?"APPLIED":"NOT APPLIED";
-        AppliedBadge.Background=new SolidColorBrush(!dirty&&same?Color.FromRgb(20,43,46):Color.FromRgb(52,34,15));
-        LiveStatus.Text=(currentWorkspace?(dirty?"Edited current settings — save as a preset to keep or apply changes.":"Loaded current settings — no preset created."):dirty?(same?"Saved revision is applied; your edits are not.":"Your edits are not applied. Update or fork to apply them."):same?"This preset matches the saved game settings.":known?"This preset differs from the saved game settings.":"")+" "+checkedGameDetail;
-        HeaderApplyButton.IsEnabled=!currentWorkspace&&known&&!same&&!dirty&&selected?.Historical==false;
-        HeaderApplyButton.Content=currentWorkspace?"Save preset to apply":!dirty&&same?"Already applied":"Apply preset";
-        HeaderApplyButton.ToolTip=dirty?"Update or fork your changes first.":same?"Saved game files already match this preset.":"Review changes and apply this saved preset with Elite closed.";
+        AppliedLabel.Text=error!=null?"FINISH EDITING":!known?"STATUS UNKNOWN":same?"APPLIED":"NOT APPLIED";
+        AppliedBadge.Background=new SolidColorBrush(same?Color.FromRgb(20,43,46):Color.FromRgb(52,34,15));
+        LiveStatus.Text=(error??(same?"The displayed values match the saved game settings.":known?"The displayed values are not applied. Apply writes them to the game; saving a preset is optional.":""))+(dirty?" Changes are not saved to a preset.":currentWorkspace?" No preset created.":"")+" "+checkedGameDetail;
+        HeaderApplyButton.IsEnabled=known&&!same&&error==null&&selected?.Historical==false;
+        HeaderApplyButton.Content="Apply";
+        HeaderApplyButton.ToolTip=error??(selected?.Historical==true?"Migrate this historical preset first.":same?"Saved game files already match the displayed values.":"Review and apply the displayed values with Elite closed. No preset is created or updated.");
     }
     void UpdateInventory()
     {
@@ -182,12 +184,13 @@ public partial class MainWindow : Window
     void Export_Click(object sender,RoutedEventArgs e)=>Guard(()=>{NeedSavedPreset();_=store.Files(selected!.Id);_=store.Definitions(selected.Id);var dialog=new SaveFileDialog{Title="Export this revision",FileName="elite-profile-"+selected.Id[..8]+".zip",Filter="ZIP archive|*.zip"};if(dialog.ShowDialog(this)!=true)return;ZipFile.CreateFromDirectory(Path.Combine(store.Profiles,selected.Id),dialog.FileName);StatusText.Text="Revision exported to "+dialog.FileName;});
     void Apply_Click(object sender,RoutedEventArgs e)=>Guard(()=>
     {
-        NoRecording();NeedSavedPreset();if(selected!.Historical)throw new InvalidOperationException("Historical snapshots must be migrated first.");if(GameRunning())throw new InvalidOperationException("Close Elite Dangerous first.");
-        if(IsDirty||Edited().Fingerprint()!=selectedFiles!.Fingerprint())throw new InvalidOperationException("The editor contains unsaved changes. Update or fork this preset before applying it.");
-        var current=FileSet.Read(settings.Paths.Graphics);var expected=current.Fingerprint();var validated=store.Files(selected.Id);var defs=store.Definitions(selected.Id);
+        NoRecording();NeedSelection();if(selected!.Historical)throw new InvalidOperationException("Historical snapshots must be migrated first.");if(GameRunning())throw new InvalidOperationException("Close Elite Dangerous first.");
+        var validated=Edited();validated.Validate();var defs=selectedDefinitions;
+        var current=FileSet.Read(settings.Paths.Graphics);var expected=current.Fingerprint();
+        if(validated.Fingerprint()==expected){RefreshLive();StatusText.Text="The displayed values already match the saved game settings.";return;}
         var changes=ChangeReview.Between(current,validated);
         if(!ReviewApply(changes))return;
-        apply.Apply(settings.Paths.Graphics,validated,expected,defs,settings.Paths.ReadDefinitions(),selected.GameBuild,settings.Paths.Build());settings.LastAppliedFingerprint=FileSet.Read(settings.Paths.Graphics).Fingerprint();SaveSettings();RefreshLive();StatusText.Text="Applied and verified. Restart Elite through your normal launch route.";
+        apply.Apply(settings.Paths.Graphics,validated,expected,defs,settings.Paths.ReadDefinitions(),selected.GameBuild,settings.Paths.Build());settings.LastAppliedFingerprint=FileSet.Read(settings.Paths.Graphics).Fingerprint();SaveSettings();RefreshLive();RefreshDirty();StatusText.Text="Displayed settings applied and verified. No preset was created or updated. Restart Elite through your normal launch route.";
     });
     void Restore_Click(object sender,RoutedEventArgs e)=>Guard(()=>{NoRecording();if(!Review("Restore previous graphics","Restore the exact saved files from the last apply. External edits to managed files will pause restoration rather than be overwritten.","Restore saved files"))return;if(apply.List().Any(x=>x.State=="Prepared"))apply.RecoverPending(settings.Paths.Graphics);else apply.RestorePrevious(settings.Paths.Graphics,FileSet.Read(settings.Paths.Graphics).Fingerprint());settings.LastAppliedFingerprint=FileSet.Read(settings.Paths.Graphics).Fingerprint();SaveSettings();RefreshLive();StatusText.Text="Previous graphics restored and verified.";});
     static string DiffText(IReadOnlyList<SettingDiff> differences)=>differences.Count==0?"No changes.":string.Join("\n\n",differences.Select(x=>$"{x.File}\n{x.Path}\n  {x.Before} → {x.After}"));
